@@ -1,0 +1,44 @@
+[package]
+name = "jevmalloc"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description.workspace = true
+
+[features]
+default = [
+    "background_threads_runtime_support",
+    "unprefixed_malloc_on_supported_platforms",
+]
+background_threads = ["jevmalloc-sys/background_threads"]
+background_threads_runtime_support = ["jevmalloc-sys/background_threads_runtime_support"]
+disable_cache_oblivious = ["jevmalloc-sys/disable_cache_oblivious"]
+disable_initial_exec_tls = ["jevmalloc-sys/disable_initial_exec_tls"]
+fill = ["jevmalloc-sys/fill"]
+global_hooks = []
+profiling = ["jevmalloc-sys/profiling"]
+stats = ["jevmalloc-sys/stats"]
+unprefixed_malloc_on_supported_platforms = ["jevmalloc-sys/unprefixed_malloc_on_supported_platforms"]
+
+[dependencies]
+jevmalloc-sys.workspace = true
+libc.workspace = true
+paste.workspace = true
+
+[lib]
+test = false
+bench = false
+
+[[test]]
+name = "ffi"
+required-features = ["stats"]
+
+[lints]
+workspace = true

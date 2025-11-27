@@ -1,3 +1,3 @@
-[submodule "jemalloc-sys/jemalloc"]
-	path = jemalloc-sys/jemalloc
-	url = https://github.com/tikv/jemalloc
+[submodule "jevmalloc-sys/jemalloc"]
+	path = jevmalloc-sys/jemalloc
+	url = https://github.com/matrix-construct/jemalloc

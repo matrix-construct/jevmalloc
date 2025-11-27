@@ -1,2 +1,168 @@
 [workspace]
-members = ["jemallocator", "jemallocator-global", "jemalloc-ctl", "jemalloc-sys"]
+resolver = "3"
+members = ["jevmalloc", "jevmalloc-sys"]
+default-members = ["jevmalloc", "jevmalloc-sys"]
+
+[workspace.package]
+authors = ["Jason Volk <jason@zemos.net>", "June August <june@girlboss.ceo>"]
+categories = ["memory-management", "api-bindings"]
+description = "Rust allocator wrapping jemalloc."
+documentation = "https://matrix-construct.github.io/jemallocator"
+edition = "2024"
+homepage = "https://github.com/matrix-construct/jemallocator"
+keywords = ["allocator", "jemalloc"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/matrix-construct/jemallocator"
+version = "0.0.0+5.3.0-1-g54eaed1d8b56b1aa528be3bdd1877e59c56fa90c"
+
+[workspace.dependencies]
+jevmalloc = { path = "jevmalloc", default-features = false }
+jevmalloc-sys = { path = "jevmalloc-sys", default-features = false }
+libc = { version = "0.2", default-features = false }
+paste = "1"
+cc = "1"
+
+[workspace.lints.rust]
+absolute-paths-not-starting-with-crate = "warn"
+#box-pointers = "warn"
+deprecated-in-future = "warn"
+elided-lifetimes-in-paths = "warn"
+explicit-outlives-requirements = "warn"
+ffi-unwind-calls = "warn"
+keyword-idents = "warn"
+macro-use-extern-crate = "warn"
+meta-variable-misuse = "warn"
+missing-abi = "warn"
+#missing-copy-implementations = "warn"
+#missing-debug-implementations = "warn"
+non-ascii-idents = "warn"
+rust-2021-incompatible-closure-captures = "warn"
+rust-2021-incompatible-or-patterns = "warn"
+rust-2021-prefixes-incompatible-syntax = "warn"
+rust-2021-prelude-collisions = "warn"
+single-use-lifetimes = "warn"
+trivial-casts = "warn"
+unit-bindings = "warn"
+unreachable-pub = "warn"
+unsafe-op-in-unsafe-fn = "warn"
+unstable-features = "warn"
+unused-extern-crates = "warn"
+unused-import-braces = "warn"
+unused-lifetimes = "warn"
+unused-macro-rules = "warn"
+unused-qualifications = "warn"
+
+# some sadness
+elided_named_lifetimes = "allow"
+mismatched_lifetime_syntaxes = "allow"
+let_underscore_drop = "allow"
+missing_docs = "allow"
+unexpected_cfgs = "allow"
+unused_braces = "allow"
+unused_crate_dependencies = "allow"
+unsafe_code = "allow"
+variant_size_differences = "allow"
+unknown_lints = "allow"
+renamed_and_removed_lints = "allow"
+unstable_name_collisions = "allow"
+trivial-numeric-casts = "allow"
+
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = -1 }
+multiple_crate_versions = { level = "allow", priority = 1 }
+complexity = { level = "warn", priority = -1 }
+needless_update = { level = "allow", priority = 1 }
+correctness = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+missing_const_for_fn = { level = "allow", priority = 1 }
+option_if_let_else = { level = "allow", priority = 1 }
+redundant_pub_crate = { level = "allow", priority = 1 }
+significant_drop_in_scrutinee = { level = "allow", priority = 1 }
+significant_drop_tightening = { level = "allow", priority = 1 }
+tuple_array_conversions = { level = "allow", priority = 1 }
+pedantic = { level = "warn", priority = -1 }
+too_long_first_doc_paragraph = { level = "allow", priority = 1 }
+default_trait_access = { level = "allow", priority = 1 }
+doc_markdown = { level = "allow", priority = 1 }
+enum_glob_use = { level = "allow", priority = 1 }
+if_not_else = { level = "allow", priority = 1 }
+if_then_some_else_none = { level = "allow", priority = 1 }
+inline_always = { level = "allow", priority = 1 }
+map_unwrap_or = { level = "allow", priority = 1 }
+match_bool = { level = "allow", priority = 1 }
+match_same_arms = { level = "allow", priority = 1 }
+missing_docs_in_private_items = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+module_name_repetitions = { level = "allow", priority = 1 }
+needless_continue = { level = "allow", priority = 1 }
+no_effect_underscore_binding = { level = "allow", priority = 1 }
+similar_names = { level = "allow", priority = 1 }
+single_match_else = { level = "allow", priority = 1 }
+struct_excessive_bools = { level = "allow", priority = 1 }
+struct_field_names = { level = "allow", priority = 1 }
+unnecessary_wraps = { level = "allow", priority = 1 }
+unused_async = { level = "allow", priority = 1 }
+perf = { level = "warn", priority = -1 }
+as_underscore = "warn"
+assertions_on_result_states = "warn"
+dbg_macro = "warn"
+deref_by_slicing = "warn"
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+exit = "warn"
+filetype_is_file = "warn"
+float_cmp_const = "warn"
+format_push_string = "warn"
+get_unwrap = "warn"
+impl_trait_in_params = "warn"
+let_underscore_untyped = "warn"
+lossy_float_literal = "warn"
+mem_forget = "warn"
+mutex_atomic = "warn"
+pub_without_shorthand = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+redundant_type_annotations = "warn"
+semicolon_outside_block = "warn"
+str_to_string = "warn"
+string_lit_chars_any = "warn"
+implicit_clone = "warn"
+suspicious_xor_used_as_pow = "warn"
+tests_outside_test_module = "warn"
+try_err = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+unnecessary_self_imports = "warn"
+unneeded_field_pattern = "warn"
+unseparated_literal_suffix = "warn"
+verbose_file_reads = "warn"
+style = { level = "warn", priority = -1 }
+assertions_on_constants = { level = "allow", priority = 1 }
+module_inception = { level = "allow", priority = 1 }
+obfuscated_if_else = { level = "allow", priority = 1 }
+collapsible_if = { level = "allow", priority = 1 }
+suspicious = { level = "warn", priority = -1 }
+let_underscore_future = { level = "allow", priority = 1 }
+literal_string_with_formatting_args = { level = "allow", priority = 1 }
+
+# some sadness
+renamed_and_removed_lints = "allow"
+as_conversions = "allow"
+undocumented_unsafe_blocks = "allow"
+should_panic_without_expect = "allow"
+cast_possible_wrap = "allow"
+redundant_feature_names = "allow"
+cast_sign_loss = "allow"
+arithmetic_side_effects = "allow"
+missing_assert_message = "allow"
+unreadable_literal = "allow"
+collection_is_never_read = "allow"
+tabs_in_doc_comments = "allow"
+case_sensitive_file_extension_comparisons = "allow"
+cast_possible_truncation = "allow"
+string_slice = "allow"
+fn_to_numeric_cast_array = "allow"
+default_union_representation = "allow"
+fn_to_numeric_cast_any = "allow"

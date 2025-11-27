@@ -1,0 +1,42 @@
+[package]
+name = "jevmalloc-sys"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true 
+readme.workspace = true 
+keywords.workspace = true 
+categories.workspace = true 
+repository.workspace = true 
+homepage.workspace = true
+documentation.workspace = true 
+description.workspace = true 
+build = "build.rs"
+links = "jemalloc"
+
+[features]
+default = [
+    "background_threads_runtime_support",
+    "unprefixed_malloc_on_supported_platforms",
+]
+background_threads = ["background_threads_runtime_support"]
+background_threads_runtime_support = []
+disable_cache_oblivious = []
+disable_initial_exec_tls = []
+fill = []
+profiling = []
+stats = []
+unprefixed_malloc_on_supported_platforms = []
+
+[dependencies]
+libc.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+
+[lib]
+test = false
+bench = false
+
+[lints]
+workspace = true
