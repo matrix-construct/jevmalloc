@@ -78,6 +78,7 @@ option! {
 	mib_docs: /// See [`narenas`].
 }
 
+#[cfg(feature = "fill")]
 option! {
 	junk[ str: b"opt.junk\0", str: 2 ] => &'static str |
 	ops: r |
@@ -112,6 +113,7 @@ option! {
 	mib_docs: /// See [`junk`].
 }
 
+#[cfg(feature = "fill")]
 option! {
 	zero[ str: b"opt.zero\0", non_str: 2 ] => bool |
 	ops: r |

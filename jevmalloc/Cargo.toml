@@ -14,15 +14,18 @@ description.workspace = true
 
 [features]
 default = [
-    "background_threads_runtime_support",
+    "cache_oblivious",
+    "initial_exec_tls",
     "unprefixed_malloc_on_supported_platforms",
 ]
-background_threads = ["jevmalloc-sys/background_threads"]
-background_threads_runtime_support = ["jevmalloc-sys/background_threads_runtime_support"]
-disable_cache_oblivious = ["jevmalloc-sys/disable_cache_oblivious"]
-disable_initial_exec_tls = ["jevmalloc-sys/disable_initial_exec_tls"]
+cache_oblivious = ["jevmalloc-sys/cache_oblivious"]
+check_safety = ["jevmalloc-sys/check_safety"]
+check_size_match = ["jevmalloc-sys/check_size_match"]
+check_use_after_free = ["fill", "jevmalloc-sys/check_use_after_free"]
 fill = ["jevmalloc-sys/fill"]
 global_hooks = []
+initial_exec_tls = ["jevmalloc-sys/initial_exec_tls"]
+paranoid = ["check_safety", "check_size_match", "check_use_after_free", "jevmalloc-sys/paranoid"]
 profiling = ["jevmalloc-sys/profiling"]
 stats = ["jevmalloc-sys/stats"]
 unprefixed_malloc_on_supported_platforms = ["jevmalloc-sys/unprefixed_malloc_on_supported_platforms"]

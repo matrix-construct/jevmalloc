@@ -200,27 +200,6 @@ fn main() {
 
 	// collect `malloc_conf` string:
 	let mut malloc_conf = String::new();
-
-	if let Some(bg) = BackgroundThreadSupport::new(&target) {
-		// `jemalloc` is compiled with background thread run-time support on
-		// available platforms by default so there is nothing to do to enable
-		// it.
-
-		if bg.always_enabled {
-			// Background thread support does not enable background threads at
-			// run-time, just support for enabling them via run-time configuration
-			// options (they are disabled by default)
-
-			// The `enable_background_threads` cargo feature forces background
-			// threads to be enabled at run-time by default:
-			malloc_conf += "background_thread:true";
-		}
-	} else {
-		// Background thread run-time support is disabled by
-		// disabling background threads at compile-time:
-		malloc_conf += "background_thread:false";
-	}
-
 	if let Ok(malloc_conf_opts) = read_and_watch_env("JEMALLOC_SYS_WITH_MALLOC_CONF") {
 		if !malloc_conf.is_empty() {
 			malloc_conf.push(',');
@@ -269,6 +248,54 @@ fn main() {
 		cmd.env("CPPFLAGS", "-DNDEBUG");
 	}
 
+	if env::var("CARGO_FEATURE_CACHE_OBLIVIOUS").is_ok() {
+		info!("CARGO_FEATURE_CACHE_OBLIVIOUS set");
+		cmd.arg("--enable-cache-oblivious");
+	} else {
+		info!("CARGO_FEATURE_CACHE_OBLIVIOUS not set");
+		cmd.arg("--disable-cache-oblivious");
+	}
+
+	if env::var("CARGO_FEATURE_CHECK_SAFETY").is_ok() {
+		info!("CARGO_FEATURE_CHECK_SAFETY set");
+		cmd.arg("--enable-opt-safety-checks");
+	} else {
+		info!("CARGO_FEATURE_CHECK_SAFETY not set");
+		cmd.arg("--disable-opt-safety-checks");
+	}
+
+	if env::var("CARGO_FEATURE_CHECK_SIZE_MATCH").is_ok() {
+		info!("CARGO_FEATURE_CHECK_SIZE_MATCH set");
+		cmd.arg("--enable-opt-size-checks");
+	} else {
+		info!("CARGO_FEATURE_CHECK_SIZE_MATCH not set");
+		cmd.arg("--disable-opt-size-checks");
+	}
+
+	if env::var("CARGO_FEATURE_CHECK_USE_AFTER_FREE").is_ok() {
+		info!("CARGO_FEATURE_CHECK_USE_AFTER_FREE set");
+		cmd.arg("--enable-uaf-detection");
+	} else {
+		info!("CARGO_FEATURE_CHECK_USE_AFTER_FREE not set");
+		cmd.arg("--disable-uaf-detection");
+	}
+
+	if env::var("CARGO_FEATURE_FILL").is_ok() {
+		info!("CARGO_FEATURE_FILL set");
+		cmd.arg("--enable-fill");
+	} else {
+		info!("CARGO_FEATURE_FILL not set");
+		cmd.arg("--disable-fill");
+	}
+
+	if env::var("CARGO_FEATURE_INITIAL_EXEC_TLS").is_ok() {
+		info!("CARGO_FEATURE_INITIAL_EXEC_TLS set");
+		cmd.arg("--enable-initial-exec-tls");
+	} else {
+		info!("CARGO_FEATURE_INITIAL_EXEC_TLS not set");
+		cmd.arg("--disable-initial-exec-tls");
+	}
+
 	if env::var("CARGO_FEATURE_PROFILING").is_ok() {
 		info!("CARGO_FEATURE_PROFILING set");
 		cmd.arg("--enable-prof");
@@ -283,30 +310,6 @@ fn main() {
 	} else {
 		info!("CARGO_FEATURE_STATS not set");
 		cmd.arg("--disable-stats");
-	}
-
-	if env::var("CARGO_FEATURE_DISABLE_INITIAL_EXEC_TLS").is_ok() {
-		info!("CARGO_FEATURE_DISABLE_INITIAL_EXEC_TLS set");
-		cmd.arg("--disable-initial-exec-tls");
-	} else {
-		info!("CARGO_FEATURE_DISABLE_INITIAL_EXEC_TLS not set");
-		cmd.arg("--enable-initial-exec-tls");
-	}
-
-	if env::var("CARGO_FEATURE_DISABLE_CACHE_OBLIVIOUS").is_ok() {
-		info!("CARGO_FEATURE_DISABLE_CACHE_OBLIVIOUS set");
-		cmd.arg("--disable-cache-oblivious");
-	} else {
-		info!("CARGO_FEATURE_DISABLE_CACHE_OBLIVIOUS not set");
-		cmd.arg("--enable-cache-oblivious");
-	}
-
-	if env::var("CARGO_FEATURE_FILL").is_ok() {
-		info!("CARGO_FEATURE_FILL set");
-		cmd.arg("--enable-fill");
-	} else {
-		info!("CARGO_FEATURE_FILL not set");
-		cmd.arg("--disable-fill");
 	}
 
 	cmd.arg(format!("--host={}", gnu_target(&target)));
@@ -381,36 +384,6 @@ fn main() {
 			.file("src/pthread_atfork.c")
 			.compile("pthread_atfork");
 		println!("cargo:rerun-if-changed=src/pthread_atfork.c");
-	}
-}
-
-struct BackgroundThreadSupport {
-	always_enabled: bool,
-}
-
-impl BackgroundThreadSupport {
-	fn new(target: &str) -> Option<Self> {
-		let runtime_support =
-			env::var("CARGO_FEATURE_BACKGROUND_THREADS_RUNTIME_SUPPORT").is_ok();
-
-		let always_enabled = env::var("CARGO_FEATURE_BACKGROUND_THREADS").is_ok();
-
-		if !runtime_support {
-			assert!(
-				!always_enabled,
-				"enabling `background_threads` requires `background_threads_runtime_support`"
-			);
-			return None;
-		}
-
-		if NO_BG_THREAD_TARGETS
-			.iter()
-			.any(|i| target.contains(i))
-		{
-			warning!("`background_threads_runtime_support` not supported for `{}`", target);
-		}
-
-		Some(Self { always_enabled })
 	}
 }
 

@@ -14,16 +14,23 @@ description.workspace = true
 build = "build.rs"
 links = "jemalloc"
 
+[lib]
+test = false
+bench = false
+
 [features]
 default = [
-    "background_threads_runtime_support",
+    "cache_oblivious",
+    "initial_exec_tls",
     "unprefixed_malloc_on_supported_platforms",
 ]
-background_threads = ["background_threads_runtime_support"]
-background_threads_runtime_support = []
-disable_cache_oblivious = []
-disable_initial_exec_tls = []
+cache_oblivious = []
+check_safety = []
+check_size_match = []
+check_use_after_free = ["fill"]
 fill = []
+initial_exec_tls = []
+paranoid = ["check_safety", "check_size_match", "check_use_after_free"]
 profiling = []
 stats = []
 unprefixed_malloc_on_supported_platforms = []
@@ -34,10 +41,6 @@ libc.workspace = true
 [build-dependencies]
 cc.workspace = true
 rustflags.workspace = true
-
-[lib]
-test = false
-bench = false
 
 [lints]
 workspace = true
