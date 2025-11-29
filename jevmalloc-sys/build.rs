@@ -16,6 +16,8 @@ use std::{
 	process::Command,
 };
 
+use rustflags::Flag as RustFlag;
+
 include!("src/env.rs");
 
 macro_rules! info {
@@ -104,36 +106,33 @@ fn main() {
 		return;
 	}
 
-	// TODO: Cargo provides the wrong target arch.
-	let march: OsString = env::var("CARGO_CFG_TARGET_ARCH")
-		.ok()
-		.filter(|_| false)
-		.map(|arch| arch.replacen('_', "-", 1))
+	let target_arch = rustflags::from_env()
+		.find_map(|flag| match flag {
+			| RustFlag::Codegen { opt, value } if opt == "target-cpu" => Some(value),
+			| _ => None,
+		})
+		.flatten()
+		.or_else(|| {
+			env::var("CARGO_CFG_TARGET_ARCH")
+				.map(|arch| arch.replacen('_', "-", 1))
+				.ok()
+		});
+
+	let march: OsString = target_arch
 		.map(|arch| format!("-march={arch}"))
 		.unwrap_or_default()
 		.into();
 
-	//TODO: Cargo's feature list differs slightly from those understood by Clang
-	// and GCC. If cargo simply provided the correct target cpu (i.e. x86-64-v3)
-	// that can be the sole feature-flag.
-	let is_gcc = cc::Build::new().get_compiler().is_like_gnu();
-	let is_clang = cc::Build::new().get_compiler().is_like_clang();
-	let target_features: Vec<OsString> = env::var("CARGO_CFG_TARGET_FEATURE")
-		.as_ref()
-		.into_iter()
-		.filter(|_| false)
-		.flat_map(|arch| arch.split(','))
-		.map(|feat| {
-			if is_clang {
-				format!("-Xclang -target-feature -Xclang +{feat}")
-			} else if is_gcc {
-				format!("-m{feat}")
-			} else {
-				String::new()
-			}
-		})
-		.map(Into::into)
-		.collect();
+	let tune_arch = rustflags::from_env().find_map(|flag| match flag {
+		| RustFlag::Z(s) if s.starts_with("tune-cpu") =>
+			s.split_once('=').map(|(_, v)| v.to_owned()),
+		| _ => None,
+	});
+
+	let mtune: OsString = tune_arch
+		.map(|arch| format!("-mtune={arch}"))
+		.unwrap_or_default()
+		.into();
 
 	let compiler = cc::Build::new()
 		.no_default_flags(true)
@@ -141,7 +140,7 @@ fn main() {
 		.warnings(true)
 		.extra_warnings(true)
 		.flag(march.as_os_str())
-		.flags(&target_features)
+		.flag(mtune.as_os_str())
 		.get_compiler();
 
 	let cflags = compiler
