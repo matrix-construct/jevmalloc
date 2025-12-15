@@ -111,12 +111,7 @@ fn main() {
 			| RustFlag::Codegen { opt, value } if opt == "target-cpu" => Some(value),
 			| _ => None,
 		})
-		.flatten()
-		.or_else(|| {
-			env::var("CARGO_CFG_TARGET_ARCH")
-				.map(|arch| arch.replacen('_', "-", 1))
-				.ok()
-		});
+		.flatten();
 
 	let march: OsString = target_arch
 		.map(|arch| format!("-march={arch}"))
