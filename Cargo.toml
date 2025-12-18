@@ -18,8 +18,8 @@ version = "0.0.0+5.3.0-1-g54eaed1d8b56b1aa528be3bdd1877e59c56fa90c"
 
 [workspace.dependencies]
 cc = "1"
-jevmalloc = { path = "jevmalloc", default-features = false }
-jevmalloc-sys = { path = "jevmalloc-sys", default-features = false }
+jevmalloc = { version = "0.0.0", path = "jevmalloc", default-features = false }
+jevmalloc-sys = { version = "0.0.0", path = "jevmalloc-sys", default-features = false }
 libc = { version = "0.2", default-features = false }
 paste = "1"
 rustflags = "0.1"
