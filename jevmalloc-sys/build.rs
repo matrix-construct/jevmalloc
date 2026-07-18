@@ -349,19 +349,16 @@ fn main() {
 	// Linkage directives to pull in jemalloc and its dependencies.
 	//
 	// On some platforms we need to be sure to link in `pthread` which jemalloc
-	// depends on, and specifically on android we need to also link to libgcc.
-	// Currently jemalloc is compiled with gcc which will generate calls to
-	// intrinsics that are libgcc specific (e.g. those intrinsics aren't present in
-	// libcompiler-rt), so link that in to get that support.
+	// depends on. Android needs neither pthread (bionic bundles it) nor the
+	// libgcc intrinsics of old (NDK r23+ dropped libgcc; clang's builtins cover
+	// them).
 	if target.contains("windows") {
 		println!("cargo:rustc-link-lib=static=jemalloc");
 	} else {
 		println!("cargo:rustc-link-lib=static=jemalloc_pic");
 	}
 	println!("cargo:rustc-link-search=native={}/lib", build_dir.display());
-	if target.contains("android") {
-		println!("cargo:rustc-link-lib=gcc");
-	} else if !target.contains("windows") {
+	if !target.contains("windows") && !target.contains("android") {
 		println!("cargo:rustc-link-arg=-pthread");
 	}
 	// GCC may generate a __atomic_exchange_1 library call which requires -latomic
