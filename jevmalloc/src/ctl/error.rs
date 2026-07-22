@@ -2,7 +2,8 @@
 
 use libc::c_int;
 
-use crate::{fmt, num, result};
+use super::Result;
+use crate::std::{fmt, num};
 
 pub(super) trait NonZeroT {
 	type T;
@@ -23,9 +24,6 @@ pub(super) type NonZeroCInt = <c_int as NonZeroT>::T;
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Error(NonZeroCInt);
-
-/// Result type
-pub type Result<T> = result::Result<T, Error>;
 
 impl fmt::Debug for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

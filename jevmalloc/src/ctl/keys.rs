@@ -27,7 +27,8 @@
 
 #![allow(clippy::uninlined_format_args)]
 
-use crate::ctl::{error::Result, fmt, ops, raw};
+use super::{Result, raw};
+use crate::std::{fmt, ops};
 
 /// A `Name` in the _MALLCTL NAMESPACE_.
 #[repr(transparent)]

@@ -2,10 +2,8 @@
 
 use libc::c_char;
 
-use crate::ctl::{
-	error::{Result, cvt},
-	ptr, slice,
-};
+use super::{Result, error::cvt};
+use crate::std::{ptr, slice};
 
 /// Translates `name` to a `mib` (Management Information Base)
 ///

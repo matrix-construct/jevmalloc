@@ -20,23 +20,19 @@
 pub mod ctl;
 mod global_alloc;
 
-#[cfg(not(feature = "use_std"))]
-use core as std;
-
-#[cfg(feature = "use_std")]
-pub(crate) use ::std;
-
 /// Raw bindings to jemalloc
 pub mod ffi {
-	pub use jevmalloc_sys::*;
+	pub use ::jevmalloc_sys::*;
 }
 
-use core::{alloc::Layout, cmp, hint::assert_unchecked};
-
-use libc::c_void;
+#[cfg(not(feature = "use_std"))]
+use ::core as std;
+use ::libc::c_void;
+#[cfg(feature = "use_std")]
+use ::std;
 
 pub use self::global_alloc::hook;
-pub(crate) use crate::std::{fmt, num, result};
+use self::std::{alloc::Layout, cmp, hint::assert_unchecked};
 
 /// Handle to the jemalloc allocator
 ///
@@ -79,6 +75,10 @@ pub const QUANTUM: usize = 8;
 	target_arch = "sparc64"
 ))]
 pub const QUANTUM: usize = 16;
+
+#[cfg(test)]
+#[global_allocator]
+static ALLOC: Jemalloc = Jemalloc;
 
 /// Adjust the layout's size and alignment based on platform requirements prior
 /// to calls into jemalloc.
