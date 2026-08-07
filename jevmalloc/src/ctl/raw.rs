@@ -64,6 +64,12 @@ pub fn name_to_mib(name: &[u8], mib: &mut [usize]) -> Result<()> {
 /// invalid `T`, for example, by passing `T=bool` for a key returning `u8`. The
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
+///
+/// `arena.<i>.name`, new in `jemalloc` 5.3.1, additionally inverts the read
+/// convention: it treats the read slot as the address of a caller-allocated
+/// `ARENA_NAME_LEN` (32) byte buffer and copies the name through it, so
+/// reading it as `T = *const c_char` hands `jemalloc` an uninitialized
+/// pointer to write through.
 pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
 	unsafe {
 		let mut len = size_of::<T>();
@@ -92,6 +98,12 @@ pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
 /// invalid `T`, for example, by passing `T=bool` for a key returning `u8`. The
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
+///
+/// `arena.<i>.name`, new in `jemalloc` 5.3.1, additionally inverts the read
+/// convention: it treats the read slot as the address of a caller-allocated
+/// `ARENA_NAME_LEN` (32) byte buffer and copies the name through it, so
+/// reading it as `T = *const c_char` hands `jemalloc` an uninitialized
+/// pointer to write through.
 pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
 	unsafe {
 		validate_name(name);
