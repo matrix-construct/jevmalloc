@@ -2,8 +2,8 @@
 //!
 //! The [`Name`] and [`Mib`]/[`MibStr`] types are provided as safe indices into
 //! the _MALLCTL NAMESPACE_. These are constructed from null-terminated strings
-//! via the [`AsName`] trait. The [`Access`] trait provides provides safe access
-//! into the `_MALLCTL NAMESPACE_`.
+//! via the [`AsName`] trait. The [`Access`] trait provides safe access into
+//! the _MALLCTL NAMESPACE_.
 //!
 //! # Example
 //!

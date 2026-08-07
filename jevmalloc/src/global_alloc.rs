@@ -84,7 +84,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 			let ptr = ffi::mallocx(layout.size(), flags);
 			debug_assert!(
 				(ptr as uintptr_t).is_multiple_of(layout.align()),
-				"alloc: alignment mismatch"
+				"alloc_zeroed: alignment mismatch"
 			);
 
 			debug_assert!(
@@ -114,12 +114,12 @@ unsafe impl GlobalAlloc for Jemalloc {
 			let ptr = ffi::rallocx(ptr.cast::<c_void>(), layout.size(), flags);
 			debug_assert!(
 				(ptr as uintptr_t).is_multiple_of(layout.align()),
-				"alloc: alignment mismatch"
+				"realloc: alignment mismatch"
 			);
 
 			debug_assert!(
 				ffi::sallocx(ptr, flags) >= layout.size(),
-				"reelloc: sallocx() size mismatch"
+				"realloc: sallocx() size mismatch"
 			);
 
 			ptr.cast::<u8>()
