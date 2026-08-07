@@ -251,6 +251,52 @@ unsafe extern "C" {
 	#[cfg_attr(prefixed, link_name = "_rjem_free")]
 	pub fn free(ptr: *mut c_void);
 
+	/// Deallocates the previously-allocated memory region referenced by `ptr`,
+	/// passing its allocation size as an optimization.
+	///
+	/// This is the ISO/IEC 9899:2024 (“ISO C23”) extension of [`free`] with a
+	/// `size` parameter: supplying the size the region was requested with lets
+	/// `jemalloc` skip work [`free`] must otherwise do to recover it. It is
+	/// equivalent to [`sdallocx`] with empty `flags`.
+	///
+	/// # Safety
+	///
+	/// The behavior is _undefined_ if:
+	///
+	/// * `ptr` is null. C23 specifies a null `ptr` as a no-op, but `jemalloc`
+	///   forwards straight to [`sdallocx`], which never treats null as one; the
+	///   debug assert sits on its slow path, so the failure can also be a
+	///   deferred crash rather than an immediate abort.
+	/// * `ptr` does not match a pointer earlier returned by the memory
+	///   allocation functions of this crate,
+	/// * the memory region referenced by `ptr` has been deallocated,
+	/// * `size` is not the size that was requested when `ptr` was allocated, or
+	/// * `ptr` was allocated with an explicitly requested alignment, whether by
+	///   [`aligned_alloc`], [`posix_memalign`], or [`mallocx`] with an
+	///   alignment flag. Use [`free_aligned_sized`] or [`free`] for those.
+	#[cfg_attr(prefixed, link_name = "_rjem_free_sized")]
+	pub fn free_sized(ptr: *mut c_void, size: size_t);
+
+	/// Deallocates the previously-allocated memory region referenced by `ptr`,
+	/// passing both its allocation size and alignment as an optimization.
+	///
+	/// This is the ISO/IEC 9899:2024 (“ISO C23”) counterpart of [`free_sized`]
+	/// for a region allocated with an explicitly requested alignment. It is
+	/// equivalent to [`sdallocx`] with `MALLOCX_ALIGN(alignment)`.
+	///
+	/// # Safety
+	///
+	/// The behavior is _undefined_ if:
+	///
+	/// * `ptr` is null, exactly as for [`free_sized`],
+	/// * `ptr` does not match a pointer earlier returned by the memory
+	///   allocation functions of this crate,
+	/// * the memory region referenced by `ptr` has been deallocated, or
+	/// * `size` and `alignment` are not the size and alignment that were
+	///   requested when `ptr` was allocated.
+	#[cfg_attr(prefixed, link_name = "_rjem_free_aligned_sized")]
+	pub fn free_aligned_sized(ptr: *mut c_void, alignment: size_t, size: size_t);
+
 	/// Allocates at least `size` bytes of memory according to `flags`.
 	///
 	/// It returns a pointer to the start (lowest byte address) of the allocated
