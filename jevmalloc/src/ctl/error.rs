@@ -3,7 +3,7 @@
 use libc::c_int;
 
 use super::Result;
-use crate::std::{fmt, num};
+use crate::std::{error, fmt, num};
 
 pub(super) trait NonZeroT {
 	type T;
@@ -17,10 +17,11 @@ impl NonZeroT for i64 {
 
 pub(super) type NonZeroCInt = <c_int as NonZeroT>::T;
 
-/// Errors of the `tikv_jemalloc_sys::mallct`-family of functions.
+/// Errors of the `jevmalloc_sys::mallctl`-family of functions.
 ///
-/// The `jemalloc-sys` crate: `mallctl`, `mallctlnametomib`, and `mallctlbymib``
-/// functions return `0` on success; otherwise they return an error value.
+/// The `jevmalloc-sys` crate's `mallctl`, `mallctlnametomib`, and
+/// `mallctlbymib` functions return `0` on success; otherwise they return an
+/// error value.
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Error(NonZeroCInt);
@@ -41,22 +42,7 @@ impl fmt::Display for Error {
 	}
 }
 
-#[cfg(feature = "use_std")]
-use std::error::Error as StdError;
-
-#[cfg(feature = "use_std")]
-impl StdError for Error {
-	fn description(&self) -> &str {
-		match description(self.0.get() as c_int) {
-			| Some(m) => m,
-			| None => "Unknown error",
-		}
-	}
-
-	fn cause(&self) -> Option<&dyn StdError> { None }
-
-	fn source(&self) -> Option<&(dyn StdError + 'static)> { None }
-}
+impl error::Error for Error {}
 
 fn description(code: c_int) -> Option<&'static str> {
 	match code {

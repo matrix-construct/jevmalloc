@@ -11,9 +11,10 @@
 //! Bindings for jemalloc as an allocator
 //!
 //! This crate provides bindings to jemalloc as a memory allocator for Rust.
-//! This crate mainly exports, one type, `Jemalloc`, which implements the
-//! `GlobalAlloc` trait and optionally the `Alloc` trait,
-//! and is suitable both as a memory allocator and as a global allocator.
+//! It mainly exports one type, `Jemalloc`, which implements the `GlobalAlloc`
+//! trait and is suitable both as a memory allocator and as a global allocator.
+//! It also re-exports the raw C bindings as [`ffi`], and wraps jemalloc's
+//! control and introspection interface in [`ctl`].
 
 #![no_std]
 
@@ -25,22 +26,16 @@ pub mod ffi {
 	pub use ::jevmalloc_sys::*;
 }
 
-#[cfg(not(feature = "use_std"))]
 use ::core as std;
 use ::libc::c_void;
-#[cfg(feature = "use_std")]
-use ::std;
 
 pub use self::global_alloc::hook;
 use self::std::{alloc::Layout, cmp, hint::assert_unchecked};
 
 /// Handle to the jemalloc allocator
 ///
-/// This type implements the `GlobalAllocAlloc` trait, allowing usage a global
-/// allocator.
-///
-/// When the `api` feature of this crate is enabled, it also implements the
-/// `Allocator` trait, allowing usage in collections.
+/// It implements [`GlobalAlloc`](core::alloc::GlobalAlloc); install it as the
+/// `#[global_allocator]` to route every Rust allocation through jemalloc.
 #[derive(Debug)]
 pub struct Jemalloc;
 
