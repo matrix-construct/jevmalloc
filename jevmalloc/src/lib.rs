@@ -27,10 +27,13 @@ pub mod ffi {
 }
 
 use ::core as std;
-use ::libc::c_void;
+use ::libc::{c_int, c_void};
 
 pub use self::global_alloc::hook;
-use self::std::{alloc::Layout, cmp, hint::assert_unchecked};
+use self::{
+	ffi::MALLOCX_ALIGN,
+	std::{alloc::Layout, cmp, hint::assert_unchecked},
+};
 
 /// Handle to the jemalloc allocator
 ///
@@ -100,6 +103,23 @@ pub unsafe fn adjust_layout(layout: Layout) -> Layout {
 
 		Layout::from_size_align_unchecked(size, align)
 	}
+}
+
+/// Compute the flag word for the jemalloc calls parameterized by a layout.
+///
+/// jemalloc tests this word before it inspects the pointer, taking its
+/// thread-cache fast path only when the word is zero. The alignment is
+/// therefore left unexpressed whenever the size class already satisfies it,
+/// which is the case at or below [`QUANTUM`] because every class that large is
+/// quantum-aligned. The size conjunct matters only for a raw layout whose
+/// alignment exceeds its size, where a sub-quantum class would under-align;
+/// [`adjust_layout`] output satisfies it trivially.
+#[inline]
+#[must_use]
+pub fn layout_flags(layout: Layout) -> c_int {
+	let implied = layout.align() <= QUANTUM && layout.align() <= layout.size();
+
+	if implied { 0 } else { MALLOCX_ALIGN(layout.align()) }
 }
 
 /// Return the usable size of the allocation pointed to by ptr.

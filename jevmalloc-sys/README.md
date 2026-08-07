@@ -156,17 +156,20 @@ target-prefixed name, e.g. `X86_64_UNKNOWN_LINUX_GNU_JEMALLOC_SYS_WITH_LG_PAGE`.
 
   This setting is architecture-specific, and although jemalloc includes known
   safe values for the most commonly used modern architectures, there is a
-  wrinkle related to GNU libc (glibc) that may impact your choice of . On most
-  modern architectures, this mandates 16-byte alignment (=4), but the glibc
-  developers chose not to meet this requirement for performance reasons. An old
-  discussion can be found at https://sourceware.org/bugzilla/show_bug.cgi?id=206
-  . Unlike glibc, jemalloc does follow the C standard by default (caveat:
-  jemalloc technically cheats for size classes smaller than the quantum), but
-  the fact that Linux systems already work around this allocator noncompliance
-  means that it is generally safe in practice to let jemalloc's minimum
-  alignment follow glibc's lead. If you specify `JEMALLOC_SYS_WITH_LG_QUANTUM=3`
-  during configuration, jemalloc will provide additional size classes that are
-  not 16-byte-aligned (24, 40, and 56).
+  wrinkle related to GNU libc (glibc) that may impact your choice of value. On
+  most modern architectures, this mandates 16-byte alignment (=4), but the
+  glibc developers chose not to meet this requirement for performance reasons.
+  An old discussion can be found at
+  https://sourceware.org/bugzilla/show_bug.cgi?id=206 . Unlike glibc, jemalloc
+  does follow the C standard by default (caveat: jemalloc technically cheats
+  for size classes smaller than the quantum).
+
+  Do not set it below the platform default here, though: `jevmalloc` hardcodes
+  that default as its `QUANTUM` and omits `MALLOCX_ALIGN` whenever the
+  requested alignment is within it, so a build whose real quantum is smaller
+  (`=3` adds the size classes 24, 40, and 56, which are not 16-byte-aligned)
+  silently under-aligns those allocations. The `jevmalloc` test suite asserts
+  `arenas.quantum >= QUANTUM` to fail such a build deterministically.
 
 * `JEMALLOC_SYS_WITH_LG_VADDR=<lg-vaddr>`: Specify the number of significant
   virtual address bits. By default, the configure script attempts to detect

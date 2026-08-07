@@ -21,20 +21,11 @@ use std::{
 	ptr,
 };
 
-use jevmalloc::{Jemalloc, QUANTUM, ffi::MALLOCX_ALIGN};
-use libc::c_int;
+use jevmalloc::{Jemalloc, layout_flags};
 use test::Bencher;
 
 #[global_allocator]
 static A: Jemalloc = Jemalloc;
-
-fn layout_to_flags(layout: &Layout) -> c_int {
-	if layout.align() <= QUANTUM && layout.align() <= layout.size() {
-		0
-	} else {
-		MALLOCX_ALIGN(layout.align())
-	}
-}
 
 macro_rules! rt {
     ($size:expr, $align:expr) => {
@@ -43,7 +34,7 @@ macro_rules! rt {
             fn [<rt_mallocx_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
                     use jevmalloc::ffi as jemalloc;
-                    let flags = layout_to_flags(&Layout::from_size_align($size, $align).unwrap());
+                    let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     let ptr = jemalloc::mallocx($size, flags);
                     test::black_box(ptr);
                     jemalloc::sdallocx(ptr, $size, flags);
@@ -54,7 +45,7 @@ macro_rules! rt {
             fn [<rt_mallocx_nallocx_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
                     use jevmalloc::ffi as jemalloc;
-                    let flags = layout_to_flags(&Layout::from_size_align($size, $align).unwrap());
+                    let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     let ptr = jemalloc::mallocx($size, flags);
                     test::black_box(ptr);
                     let rsz = jemalloc::nallocx($size, flags);
@@ -89,7 +80,7 @@ macro_rules! rt {
             fn [<rt_alloc_sallocx_unused_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
                     use jevmalloc::ffi as jemalloc;
-                    let flags = layout_to_flags(&Layout::from_size_align($size, $align).unwrap());
+                    let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     let ptr = jemalloc::mallocx($size, flags);
                     test::black_box(ptr);
                     let excess = jemalloc::sallocx(ptr, flags);
@@ -102,7 +93,7 @@ macro_rules! rt {
             fn [<rt_alloc_sallocx_used_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
                     use jevmalloc::ffi as jemalloc;
-                    let flags = layout_to_flags(&Layout::from_size_align($size, $align).unwrap());
+                    let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     let ptr = jemalloc::mallocx($size, flags);
                     test::black_box(ptr);
                     let excess = jemalloc::sallocx(ptr, flags);
@@ -115,7 +106,7 @@ macro_rules! rt {
             fn [<rt_mallocx_zeroed_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
                     use jevmalloc::ffi as jemalloc;
-                    let flags = layout_to_flags(&Layout::from_size_align($size, $align).unwrap());
+                    let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     let ptr = jemalloc::mallocx($size, flags | jemalloc::MALLOCX_ZERO);
                     test::black_box(ptr);
                     jemalloc::sdallocx(ptr, $size, flags);
@@ -126,7 +117,7 @@ macro_rules! rt {
             fn [<rt_calloc_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
                     use jevmalloc::ffi as jemalloc;
-                    let flags = layout_to_flags(&Layout::from_size_align($size, $align).unwrap());
+                    let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     test::black_box(flags);
                     let ptr = jemalloc::calloc(1, $size);
                     test::black_box(ptr);

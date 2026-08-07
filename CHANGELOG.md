@@ -16,6 +16,10 @@
   it was previously behind a `use_std` feature that did not exist.
 - Add `single_allocator` tests asserting which allocator services the process in
   each symbol regime, and port the roundtrip benchmarks to `GlobalAlloc`.
+- `GlobalAlloc` now omits `MALLOCX_ALIGN` when the size class already satisfies
+  the alignment, through the new `layout_flags`. jemalloc tests the flag word
+  before it inspects the pointer, so passing the alignment unconditionally had
+  kept every ordinary Rust allocation off the thread-cache fast path.
 
 Everything below this line predates the fork and refers to the `tikv-jemalloc*`
 crates this workspace was derived from.

@@ -15,10 +15,7 @@ use core::{
 
 use libc::{c_void, uintptr_t};
 
-use crate::{
-	Jemalloc, adjust_layout, ffi,
-	ffi::{MALLOCX_ALIGN, MALLOCX_ZERO},
-};
+use crate::{Jemalloc, adjust_layout, ffi, ffi::MALLOCX_ZERO, layout_flags};
 
 pub mod hook {
 	use super::Layout;
@@ -49,7 +46,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 			}
 
 			let layout = adjust_layout(layout);
-			let flags = MALLOCX_ALIGN(layout.align());
+			let flags = layout_flags(layout);
 			debug_assert!(
 				ffi::nallocx(layout.size(), flags) >= layout.size(),
 				"alloc: nallocx() reported failure"
@@ -78,7 +75,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 			}
 
 			let layout = adjust_layout(layout);
-			let flags = MALLOCX_ALIGN(layout.align()) | MALLOCX_ZERO;
+			let flags = layout_flags(layout) | MALLOCX_ZERO;
 			debug_assert!(
 				ffi::nallocx(layout.size(), flags) >= layout.size(),
 				"alloc_zeroed: nallocx() reported failure"
@@ -108,7 +105,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 
 			let layout = Layout::from_size_align_unchecked(new_size, layout.align());
 			let layout = adjust_layout(layout);
-			let flags = MALLOCX_ALIGN(layout.align());
+			let flags = layout_flags(layout);
 			debug_assert!(
 				ffi::nallocx(layout.size(), flags) >= layout.size(),
 				"realloc: nallocx() reported failure"
@@ -144,7 +141,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 				"dealloc: alignment mismatch"
 			);
 
-			let flags = MALLOCX_ALIGN(layout.align());
+			let flags = layout_flags(layout);
 			debug_assert!(
 				ffi::sallocx(ptr, flags) >= layout.size(),
 				"dealloc: sallocx() size mismatch"
