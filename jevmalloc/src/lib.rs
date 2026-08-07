@@ -21,11 +21,6 @@
 pub mod ctl;
 mod global_alloc;
 
-/// Raw bindings to jemalloc
-pub mod ffi {
-	pub use ::jevmalloc_sys::*;
-}
-
 use ::core as std;
 use ::libc::{c_int, c_void};
 
@@ -34,6 +29,14 @@ use self::{
 	ffi::MALLOCX_ALIGN,
 	std::{alloc::Layout, cmp, hint::assert_unchecked},
 };
+
+/// Raw bindings to jemalloc
+///
+/// Everything `jevmalloc-sys` exports, re-exported verbatim: the C entry
+/// points, the `MALLOCX_*` flag helpers, and the FFI types.
+pub mod ffi {
+	pub use ::jevmalloc_sys::*;
+}
 
 /// Handle to the jemalloc allocator
 ///
