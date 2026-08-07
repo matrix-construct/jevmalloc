@@ -464,27 +464,20 @@ union MaybeUninit<T: Copy> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
 	#[test]
 	#[cfg(not(target_arch = "mips64"))] // FIXME: SIGFPE
 	fn test_ptr2str() {
 		unsafe {
-			//{ // This is undefined behavior:
-			//    let cstr = b"";
-			//    let rstr = ptr2str(cstr as *const _ as *const c_char);
-			//    assert!(rstr.is_err());
-			// }
-			{
-				let cstr = b"\0".as_ptr().cast::<c_char>();
-				let rstr = ptr2str(cstr);
-				assert_eq!(rstr.len(), 1);
-				assert_eq!(rstr, b"\0");
-			}
-			{
-				let cstr = b"foo  baaar\0".as_ptr().cast::<c_char>();
-				let rstr = ptr2str(cstr);
-				assert_eq!(rstr.len(), b"foo  baaar\0".len());
-				assert_eq!(rstr, b"foo  baaar\0");
-			}
+			let empty = ptr2str(c"".as_ptr());
+
+			assert_eq!(empty.len(), 1);
+			assert_eq!(empty, b"\0");
+
+			let padded = ptr2str(c"foo  baaar".as_ptr());
+
+			assert_eq!(padded.len(), b"foo  baaar\0".len());
+			assert_eq!(padded, b"foo  baaar\0");
 		}
 	}
 }

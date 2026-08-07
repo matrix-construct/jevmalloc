@@ -38,7 +38,6 @@ libc.workspace = true
 paste.workspace = true
 
 [lib]
-test = false
 bench = false
 
 [[test]]
