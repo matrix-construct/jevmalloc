@@ -183,6 +183,8 @@ fn main() {
 	.env("CC", compiler.path())
 	.env("EXTRA_CFLAGS", cflags)
 	.arg(format!("--with-version={je_version}"))
+	// A renamed or removed configure option must fail the build, not warn.
+	.arg("--enable-option-checking=fatal")
 	.arg("--disable-cxx")
 	.arg("--enable-doc=no")
 	.arg("--enable-shared=no");
@@ -243,69 +245,27 @@ fn main() {
 		cmd.env("CPPFLAGS", "-DNDEBUG");
 	}
 
-	if env::var("CARGO_FEATURE_CACHE_OBLIVIOUS").is_ok() {
-		info!("CARGO_FEATURE_CACHE_OBLIVIOUS set");
-		cmd.arg("--enable-cache-oblivious");
-	} else {
-		info!("CARGO_FEATURE_CACHE_OBLIVIOUS not set");
-		cmd.arg("--disable-cache-oblivious");
+	feature_flag(&mut cmd, "CACHE_OBLIVIOUS", "cache-oblivious");
+	feature_flag(&mut cmd, "CHECK_SAFETY", "opt-safety-checks");
+	feature_flag(&mut cmd, "CHECK_SIZE_MATCH", "opt-size-checks");
+	feature_flag(&mut cmd, "CHECK_USE_AFTER_FREE", "uaf-detection");
+	feature_flag(&mut cmd, "FILL", "fill");
+	feature_flag(&mut cmd, "INITIAL_EXEC_TLS", "initial-exec-tls");
+	feature_flag(&mut cmd, "PAGEID", "pageid");
+	feature_flag(&mut cmd, "PROFILING", "prof");
+
+	// configure processes --enable-prof-frameptr only on a Linux build host;
+	// elsewhere it is accepted but inert, so it is passed only for Linux.
+	match env::var("CARGO_FEATURE_PROFILING_FRAMEPTR").is_ok() {
+		| true if target.contains("linux") => {
+			info!("CARGO_FEATURE_PROFILING_FRAMEPTR set");
+			cmd.arg("--enable-prof-frameptr");
+		},
+		| true => info!("CARGO_FEATURE_PROFILING_FRAMEPTR set; inert off Linux"),
+		| false => info!("CARGO_FEATURE_PROFILING_FRAMEPTR not set"),
 	}
 
-	if env::var("CARGO_FEATURE_CHECK_SAFETY").is_ok() {
-		info!("CARGO_FEATURE_CHECK_SAFETY set");
-		cmd.arg("--enable-opt-safety-checks");
-	} else {
-		info!("CARGO_FEATURE_CHECK_SAFETY not set");
-		cmd.arg("--disable-opt-safety-checks");
-	}
-
-	if env::var("CARGO_FEATURE_CHECK_SIZE_MATCH").is_ok() {
-		info!("CARGO_FEATURE_CHECK_SIZE_MATCH set");
-		cmd.arg("--enable-opt-size-checks");
-	} else {
-		info!("CARGO_FEATURE_CHECK_SIZE_MATCH not set");
-		cmd.arg("--disable-opt-size-checks");
-	}
-
-	if env::var("CARGO_FEATURE_CHECK_USE_AFTER_FREE").is_ok() {
-		info!("CARGO_FEATURE_CHECK_USE_AFTER_FREE set");
-		cmd.arg("--enable-uaf-detection");
-	} else {
-		info!("CARGO_FEATURE_CHECK_USE_AFTER_FREE not set");
-		cmd.arg("--disable-uaf-detection");
-	}
-
-	if env::var("CARGO_FEATURE_FILL").is_ok() {
-		info!("CARGO_FEATURE_FILL set");
-		cmd.arg("--enable-fill");
-	} else {
-		info!("CARGO_FEATURE_FILL not set");
-		cmd.arg("--disable-fill");
-	}
-
-	if env::var("CARGO_FEATURE_INITIAL_EXEC_TLS").is_ok() {
-		info!("CARGO_FEATURE_INITIAL_EXEC_TLS set");
-		cmd.arg("--enable-initial-exec-tls");
-	} else {
-		info!("CARGO_FEATURE_INITIAL_EXEC_TLS not set");
-		cmd.arg("--disable-initial-exec-tls");
-	}
-
-	if env::var("CARGO_FEATURE_PROFILING").is_ok() {
-		info!("CARGO_FEATURE_PROFILING set");
-		cmd.arg("--enable-prof");
-	} else {
-		info!("CARGO_FEATURE_PROFILING not set");
-		cmd.arg("--disable-prof");
-	}
-
-	if env::var("CARGO_FEATURE_STATS").is_ok() {
-		info!("CARGO_FEATURE_STATS set");
-		cmd.arg("--enable-stats");
-	} else {
-		info!("CARGO_FEATURE_STATS not set");
-		cmd.arg("--disable-stats");
-	}
+	feature_flag(&mut cmd, "STATS", "stats");
 
 	cmd.arg(format!("--host={}", gnu_target(&target)));
 	cmd.arg(format!("--build={}", gnu_target(&host)));
@@ -376,6 +336,16 @@ fn main() {
 			.file("src/pthread_atfork.c")
 			.compile("pthread_atfork");
 		println!("cargo:rerun-if-changed=src/pthread_atfork.c");
+	}
+}
+
+fn feature_flag(cmd: &mut Command, feature: &str, option: &str) {
+	if env::var(format!("CARGO_FEATURE_{feature}")).is_ok() {
+		info!("CARGO_FEATURE_{feature} set");
+		cmd.arg(format!("--enable-{option}"));
+	} else {
+		info!("CARGO_FEATURE_{feature} not set");
+		cmd.arg(format!("--disable-{option}"));
 	}
 }
 

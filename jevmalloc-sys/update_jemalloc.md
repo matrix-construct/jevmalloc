@@ -32,12 +32,14 @@ rm jemalloc/configure
    --long` produces it (with the abbreviated gid expanded to the full hash).
 
 4. Diff the option set and reconcile `build.rs`, which passes an explicit
-   `--enable-`/`--disable-` pair for every feature it exposes:
+   `--enable-`/`--disable-` pair for every feature it exposes (the one
+   exception is the Linux-gated, enable-only `profiling_frameptr`):
 
 ```shell
 git -C jemalloc diff <old-rev> HEAD -- configure.ac \
   | grep -E '^[+-].*(AC_ARG_ENABLE|AC_ARG_WITH)'
 ```
 
-   An option that disappeared breaks the build immediately; one that appeared
-   is only a missed opportunity, so review the additions by hand.
+   `build.rs` runs `configure` with `--enable-option-checking=fatal`, so an
+   option that disappeared breaks the build immediately; one that appeared is
+   only a missed opportunity, so review the additions by hand.
