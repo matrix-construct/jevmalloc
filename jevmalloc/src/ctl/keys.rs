@@ -9,11 +9,11 @@
 //!
 //! ```
 //! #[global_allocator]
-//! static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+//! static ALLOC: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 //!
 //! fn main() {
-//! 	use libc::{c_char, c_uint};
-//! 	use tikv_jemalloc_ctl::{Access, AsName, Mib, Name};
+//! 	use jevmalloc::ctl::{Access, AsName, Mib};
+//! 	use libc::c_uint;
 //! 	let name = b"arenas.nbins\0".name();
 //! 	let nbins: c_uint = name.read().unwrap();
 //! 	let mut mib: Mib<[usize; 4]> = b"arenas.bin.0.size\0".name().mib().unwrap();

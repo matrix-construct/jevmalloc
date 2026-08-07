@@ -21,11 +21,11 @@ use crate::std::{ptr, slice};
 ///
 /// ```
 /// #[global_allocator]
-/// static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+/// static ALLOC: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 ///
 /// fn main() {
-/// 	use libc::{c_char, c_uint};
-/// 	use tikv_jemalloc_ctl::raw;
+/// 	use jevmalloc::ctl::raw;
+/// 	use libc::c_uint;
 /// 	unsafe {
 /// 		let mut mib = [0; 4];
 /// 		let nbins: c_uint = raw::read(b"arenas.nbins\0").unwrap();

@@ -7,13 +7,13 @@ default-members = ["jevmalloc", "jevmalloc-sys"]
 authors = ["Jason Volk <jason@zemos.net>", "June August <june@girlboss.ceo>"]
 categories = ["memory-management", "api-bindings"]
 description = "Rust allocator wrapping jemalloc."
-documentation = "https://matrix-construct.github.io/jemallocator"
+documentation = "https://github.com/matrix-construct/jevmalloc"
 edition = "2024"
-homepage = "https://github.com/matrix-construct/jemallocator"
+homepage = "https://github.com/matrix-construct/jevmalloc"
 keywords = ["allocator", "jemalloc"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/matrix-construct/jemallocator"
+repository = "https://github.com/matrix-construct/jevmalloc"
 version = "0.0.0+5.3.1-1-g3a02c75e04e4286f03e931926bb3b322a769bd2c"
 
 [workspace.dependencies]

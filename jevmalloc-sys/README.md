@@ -1,17 +1,13 @@
 # jevmalloc-sys - Rust bindings to the `jemalloc` C library
 
-[![Travis-CI Status]][travis] [![Latest Version]][crates.io] [![docs]][docs.rs]
+[![ci]][github actions]
 
-> Note: the Rust allocator API is implemented for `jemalloc` in the
-> [`tikv-jemallocator`](https://crates.io/crates/tikv-jemallocator) crate.
+> Note: the Rust allocator API is implemented for `jemalloc` in the sibling
+> [`jevmalloc`](../jevmalloc) crate, which also re-exports these bindings as
+> `jevmalloc::ffi`.
 
-## Documentation
-
-* [Latest release (docs.rs)][docs.rs]
-
-`jemalloc` is a general purpose memory allocator, its documentation
-
- can be found here:
+`jemalloc` is a general purpose memory allocator; its documentation can be found
+here:
 
 * [API documentation][jemalloc_docs]
 * [Wiki][jemalloc_wiki] (design documents, presentations, profiling, debugging, tuning, ...)
@@ -19,92 +15,119 @@
 [jemalloc_docs]: http://jemalloc.net/jemalloc.3.html
 [jemalloc_wiki]: https://github.com/jemalloc/jemalloc/wiki
 
-**Current jemalloc version**: 5.2.1.
+**Current jemalloc version**: 5.3.1.
+
+The C source is vendored as the `jemalloc` submodule, tracking
+[`matrix-construct/jemalloc`](https://github.com/matrix-construct/jemalloc).
+Note that `build.rs` configures the build with the **checked-in
+`configure/configure`**, not the one the submodule would generate; see
+[`update_jemalloc.md`](update_jemalloc.md) before moving the submodule.
 
 ## Platform support
 
-See the platform support of the
-[`tikv-jemallocator`](https://crates.io/crates/tikv-jemallocator) crate.
+See the platform support table in the [workspace README](../README.md#platform-support).
 
 ## Features
 
-Most features correspond to `jemalloc` features - the reference is
-[`jemalloc/INSTALL.md`][jemalloc_install].
+Each feature corresponds to a `jemalloc` `configure` option; the reference is
+[`jemalloc/INSTALL.md`][jemalloc_install]. `build.rs` passes an explicit
+`--enable-`/`--disable-` pair for each one (the Linux-gated `profiling_frameptr`
+is the enable-only exception), so a feature being off is a positive instruction,
+not a default.
 
-### Cargo features
+Default: `cache_oblivious`, `initial_exec_tls`,
+`unprefixed_malloc_on_supported_platforms`.
 
-This crate provides following cargo feature flags:
+* `unprefixed_malloc_on_supported_platforms` (default): when **disabled**,
+  configures `jemalloc` with `--with-jemalloc-prefix=_rjem_`. Enabling it emits
+  symbols like `malloc` without a prefix, overriding the ones defined by libc.
+  This usually causes C and C++ code linked into the same program to use
+  `jemalloc` as well. On the targets in `NO_UNPREFIXED_MALLOC_TARGETS` the
+  prefix is applied regardless, because unprefixing is known to segfault there
+  from allocator mismatches.
 
-* `profiling` (configure `jemalloc` with `--enable-prof`): Enable heap profiling
-  and leak detection functionality. See jemalloc's "opt.prof" option
-  documentation for usage details. When enabled, there are several approaches to
-  backtracing, and the configure script chooses the first one in the following
-  list that appears to function correctly:
-
-  * `libunwind` (requires --enable-prof-libunwind)
-  * `libgcc` (unless --disable-prof-libgcc)
-  * `gcc intrinsics` (unless --disable-prof-gcc)
-
-* `stats` (configure `jemalloc` with `--enable-stats`): Enable statistics
-  gathering functionality. See the `jemalloc`'s "`opt.stats_print`" option
-  documentation for usage details.
-  
-* `debug` (configure `jemalloc` with `--enable-debug`): Enable assertions and
-  validation code. This incurs a substantial performance hit, but is very useful
-  during application development.
-  
-* `background_threads_runtime_support` (enabled by default): enables
-  background-threads run-time support when building `jevmalloc-sys` on some POSIX
-  targets supported by `jemalloc`. Background threads are disabled at run-time
-  by default. This option allows dynamically enabling them at run-time.
-
-* `background_threads` (disabled by default): enables background threads by
-  default at run-time. When set to true, background threads are created on
-  demand (the number of background threads will be no more than the number of
-  CPUs or active arenas). Threads run periodically, and handle purging
-  asynchronously. When switching off, background threads are terminated
-  synchronously. Note that after `fork(2)` function, the state in the child
-  process will be disabled regardless the state in parent process. See
-  `stats.background_thread` for related stats. `opt.background_thread` can be
-  used to set the default option. The background thread is only available on
-  selected pthread-based platforms.
-
-* `unprefixed_malloc_on_supported_platforms`: when disabled, configure
-  `jemalloc` with `--with-jemalloc-prefix=_rjem_`. Enabling this causes symbols
-  like `malloc` to be emitted without a prefix, overriding the ones defined by
-  libc. This usually causes C and C++ code linked in the same program to use
-  `jemalloc` as well. On some platforms prefixes are always used because
-  unprefixing is known to cause segfaults due to allocator mismatches.
-  
-* `disable_initial_exec_tls` (disabled by default): when enabled, jemalloc is
-  built with the `--disable-initial-exec-tls` option. It disables the 
-  initial-exec TLS model for jemalloc's internal thread-local storage (on those 
-  platforms that support explicit settings). This can allow jemalloc to be 
-  dynamically loaded after program startup (e.g. using dlopen). If you encounter
-  the error `yourlib.so: cannot allocate memory in static TLS block`, you'll 
-  likely want to enable this.
-
-* `disable_cache_oblivious` (disabled by default): when enabled, jemalloc is
-  built with the `--disable-cache-oblivious` option. In that case, all large
-  allocations are page-aligned as an implementation artifact. It may severely
-  harm CPU cache utilization. However, the cache-oblivious layout has a cost of
-  one extra page per large allocation which can be unfeasible for certain
+* `cache_oblivious` (default, `--enable-cache-oblivious`): when disabled, all
+  large allocations are page-aligned as an implementation artifact, which can
+  severely harm CPU cache utilization. The cache-oblivious layout costs one
+  extra page per large allocation, which can be infeasible for some
   applications.
 
-### Environment variables
+* `initial_exec_tls` (default, `--enable-initial-exec-tls`): uses the
+  initial-exec TLS model for `jemalloc`'s internal thread-local storage.
+  Disable it to allow `jemalloc` to be loaded after program startup via
+  `dlopen`; the symptom is `yourlib.so: cannot allocate memory in static TLS
+  block`.
+
+* `stats` (`--enable-stats`): enables statistics gathering. See `jemalloc`'s
+  `opt.stats_print` documentation, and note that the `stats.*` MALLCTL subtree
+  is absent without this.
+
+* `profiling` (`--enable-prof`): enables heap profiling and leak detection. See
+  `opt.prof`. There are several approaches to backtracing, and the configure
+  script picks the first that works:
+
+  * `libunwind` (requires `--enable-prof-libunwind`)
+  * frame pointer (see `profiling_frameptr` below)
+  * `libgcc` (unless `--disable-prof-libgcc`)
+  * `gcc intrinsics` (unless `--disable-prof-gcc`)
+
+* `profiling_frameptr` (implies `profiling`, `--enable-prof-frameptr`): uses the
+  optimized frame-pointer unwinder, and adds `-fno-omit-frame-pointer` to the
+  `jemalloc` build. `jemalloc` registers this option on Linux only, so the flag
+  is not passed on other targets. It takes precedence over `libgcc` and the gcc
+  intrinsics, but not over `libunwind`.
+
+* `pageid` (`--enable-pageid`): names `jemalloc`'s mappings via
+  `prctl(PR_SET_VMA_ANON_NAME)`, so they appear in `/proc/<pid>/maps` as
+  `[anon:jemalloc_pg]` / `[anon:jemalloc_pg_overcommit]`. Linux only; costs one
+  `prctl` per mapping and makes the allocator's share of the address space
+  directly observable.
+
+* `fill` (`--enable-fill`): enables junk/zero filling of allocated and
+  deallocated memory, controlled at run time by `opt.junk` and `opt.zero`.
+
+* `check_safety` (`--enable-opt-safety-checks`): enables the `opt.safety_checks`
+  run-time consistency checks.
+
+* `check_size_match` (`--enable-opt-size-checks`): validates the size passed to
+  a sized deallocation against the true allocation size, aborting on a mismatch.
+
+* `check_use_after_free` (implies `fill`, `--enable-uaf-detection`): enables
+  use-after-free detection.
+
+* `paranoid`: shorthand for `check_safety` + `check_size_match` +
+  `check_use_after_free`. Substantial performance cost; for development.
+
+`--enable-debug` is not a feature: `build.rs` derives it from
+`debug_assertions`, so a debug Cargo profile builds a debug `jemalloc`.
+
+## Running `jemalloc`'s own test suite
+
+Set `JEMALLOC_SYS_RUN_JEMALLOC_TESTS=1` and build the crate. This runs `make
+check` in the vendored source as part of the build script, and fails the build
+if any of its ~1800 test cases fail. It is the real signal after a source bump.
+The variable is deliberately not watched for changes, so switch build
+directories (`CARGO_TARGET_DIR`) rather than expecting a rebuild.
+
+## Environment variables
 
 `jemalloc` options taking values are passed via environment variables using the
 schema `JEMALLOC_SYS_{KEY}=VALUE` where the `KEY` names correspond to the
 `./configure` options of `jemalloc` where the words are capitalized and the
 hyphens `-` are replaced with underscores `_`(see
-[`jemalloc/INSTALL.md`][jemalloc_install]):
+[`jemalloc/INSTALL.md`][jemalloc_install]). Each is also read under a
+target-prefixed name, e.g. `X86_64_UNKNOWN_LINUX_GNU_JEMALLOC_SYS_WITH_LG_PAGE`.
+
+* `JEMALLOC_OVERRIDE=<path/to/libjemalloc.a>`: skip building the vendored source
+  entirely and link the named library instead. `build.rs` returns before it ever
+  runs `configure`, so **no feature on this crate affects that build**.
 
 * `JEMALLOC_SYS_WITH_MALLOC_CONF=<malloc_conf>`: Embed `<malloc_conf>` as a
   run-time options string that is processed prior to the `malloc_conf` global
   variable, the `/etc/malloc.conf` symlink, and the `MALLOC_CONF` environment
   variable (note: this variable might be prefixed as `_RJEM_MALLOC_CONF`). For
   example, to change the default decay time for dirty pages to 30 seconds:
-  
+
   ```
   JEMALLOC_SYS_WITH_MALLOC_CONF=dirty_decay_ms:30000
   ```
@@ -114,18 +137,18 @@ hyphens `-` are replaced with underscores `_`(see
   default the configure script determines the host's page size and sets the
   allocator page size equal to the system page size, so this option need not be
   specified unless the system page size may change between configuration and
-  execution, e.g. when cross compiling.
-  
+  execution, e.g. when cross compiling. Note that jemalloc 5.3.1 changed the
+  default on aarch64 Linux to 64 KiB.
+
 * `JEMALLOC_SYS_WITH_LG_HUGEPAGE=<lg-hugepage>`: Specify the base 2 log of the
   system huge page size. This option is useful when cross compiling, or when
   overriding the default for systems that do not explicitly support huge pages.
-  
-  
+
 * `JEMALLOC_SYS_WITH_LG_QUANTUM=<lg-quantum>`: Specify the base 2 log of the
   minimum allocation alignment. jemalloc needs to know the minimum alignment
   that meets the following C standard requirement (quoted from the April 12,
   2011 draft of the C11 standard):
-  
+
   > The pointer returned if the allocation succeeds is suitably aligned so that
   > it may be assigned to a pointer to any type of object with a fundamental
   > alignment requirement and then used to access such an object or an array of
@@ -169,9 +192,5 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in `jevmalloc-sys` by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
 
-[travis]: https://travis-ci.com/tikv/jemallocator
-[Travis-CI Status]: https://travis-ci.com/tikv/jemallocator.svg?branch=master
-[Latest Version]: https://img.shields.io/crates/v/tikv-jemallocator.svg
-[crates.io]: https://crates.io/crates/tikv-jemallocator
-[docs]: https://docs.rs/tikv-jemallocator/badge.svg
-[docs.rs]: https://docs.rs/tikv-jemallocator/
+[ci]: https://github.com/matrix-construct/jevmalloc/actions/workflows/main.yml/badge.svg
+[github actions]: https://github.com/matrix-construct/jevmalloc/actions

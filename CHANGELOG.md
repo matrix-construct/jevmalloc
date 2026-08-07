@@ -1,3 +1,25 @@
+# Unreleased
+
+- Remove the typed `ctl` option surface (`arenas`, `config`, `opt`,
+  `profiling`, `stats`, `stats_print`, `thread`, and the `version`, `epoch`,
+  and background-thread options); `ctl::raw`, the key types, and the error
+  type remain.
+- Update vendored `jemalloc` to 5.3.1, a 396-commit catch-up over 5.3.0. The
+  checked-in `configure` was regenerated from the new `configure.ac`; the option
+  set is purely additive, so no build glue changed.
+- Add the ISO C23 sized deallocations `free_sized` and `free_aligned_sized` to
+  `jevmalloc-sys`. Neither accepts a null pointer, contrary to C23: both forward
+  to `sdallocx`, which never treats null as a no-op.
+- Add the `pageid` feature (`--enable-pageid`), which names jemalloc's mappings
+  in `/proc/<pid>/maps`, and `profiling_frameptr` (`--enable-prof-frameptr`).
+- `jevmalloc::ctl::Error` now implements `core::error::Error` unconditionally;
+  it was previously behind a `use_std` feature that did not exist.
+- Add `single_allocator` tests asserting which allocator services the process in
+  each symbol regime, and port the roundtrip benchmarks to `GlobalAlloc`.
+
+Everything below this line predates the fork and refers to the `tikv-jemalloc*`
+crates this workspace was derived from.
+
 # 0.6.0 - 2024-07-14
 
 - Fix build on riscv64gc-unknown-linux-musl (#67) (#75)

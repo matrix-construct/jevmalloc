@@ -1,81 +1,98 @@
 # jevmalloc
 
-[![ci]][github actions] [![Latest Version]][crates.io] [![docs]][docs.rs]
-
-This project is the successor of [jemallocator](https://github.com/gnzlbg/jemallocator).
+[![ci]][github actions]
 
 > Links against `jemalloc` and provides a `Jemalloc` unit type that implements
-> the allocator APIs and can be set as the `#[global_allocator]`
+> `GlobalAlloc` and can be set as the `#[global_allocator]`
+
+A hard fork of [jemallocator](https://github.com/tikv/jemallocator), itself the
+successor of [gnzlbg/jemallocator](https://github.com/gnzlbg/jemallocator). Most
+of the upstream surface has been refactored or removed, and the crate is not
+published to crates.io; depend on it by git.
 
 ## Overview
 
-The `jemalloc` support ecosystem consists of the following crates:
+Two crates, and the C source they vendor:
 
-* `tikv-jemalloc-sys`: builds and links against `jemalloc` exposing raw C bindings to it.
-* `tikv-jemallocator`: provides the `Jemalloc` type which implements the
-  `GlobalAlloc` and `Alloc` traits. 
-* `tikv-jemalloc-ctl`: high-level wrapper over `jemalloc`'s control and introspection
-  APIs (the `mallctl*()` family of functions and the _MALLCTL NAMESPACE_)'
+* `jevmalloc-sys`: builds and links `jemalloc`, exposing raw C bindings to it.
+  The C source is the `jevmalloc-sys/jemalloc` submodule
+  ([`matrix-construct/jemalloc`](https://github.com/matrix-construct/jemalloc));
+  see [`jevmalloc-sys/update_jemalloc.md`](jevmalloc-sys/update_jemalloc.md) for
+  how to move it.
+* `jevmalloc`: provides the `Jemalloc` type implementing `GlobalAlloc`, a
+  re-export of the raw bindings as `jevmalloc::ffi`, and `jevmalloc::ctl`, a
+  typed wrapper over `jemalloc`'s control and introspection API (the
+  `mallctl*()` family and the _MALLCTL NAMESPACE_).
 
-## Documentation
-
-* [Latest release (docs.rs)][docs.rs]
-
-To use `tikv-jemallocator` add it as a dependency:
+## Usage
 
 ```toml
 # Cargo.toml
-[dependencies]
-
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+jevmalloc = { git = "https://github.com/matrix-construct/jevmalloc" }
 ```
 
-To set `tikv_jemallocator::Jemalloc` as the global allocator add this to your project:
+To set `jevmalloc::Jemalloc` as the global allocator:
 
 ```rust
 // main.rs
 #[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
-
-#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 ```
 
 And that's it! Once you've defined this `static` then jemalloc will be used for
 all allocations requested by Rust code in the same program.
 
+## Symbol prefixing
+
+The `unprefixed_malloc_on_supported_platforms` feature, on by default, builds
+`jemalloc` without a symbol prefix, so it also takes over the C names and
+services allocations made inside libc (`strdup`, `realpath(.., NULL)`, ...) and
+by linked C++ (`operator new`, which libstdc++ implements over `malloc`). The
+whole process then has one allocator.
+
+Turning it off, or building for one of the targets in
+`NO_UNPREFIXED_MALLOC_TARGETS`, prefixes every symbol with `_rjem_` and leaves
+libc its own heap. Two allocators then coexist, and a pointer must be freed
+through the same one that produced it.
+
+`jevmalloc-sys/tests/single_allocator.rs` asserts whichever of the two is in
+force, using `mallctl("arenas.lookup")` as the ownership oracle.
+
 ## Platform support
 
-The following table describes the supported platforms: 
-
 * `build`: does the library compile for the target?
-* `run`: do `tikv-jemallocator` and `tikv-jemalloc-sys` tests pass on the target?
-* `jemalloc`: do `tikv-jemalloc`'s tests pass on the target?
-
-Tier 1 targets are tested on all Rust channels (stable, beta, and nightly). All
-other targets are only tested on Rust nightly.
+* `run`: do the `jevmalloc` and `jevmalloc-sys` test suites pass on the target?
+* `jemalloc`: does `jemalloc`'s own test suite pass on the target
+  (`JEMALLOC_SYS_RUN_JEMALLOC_TESTS=1`)?
 
 | Linux targets:                      | build     | run     | jemalloc     |
 |-------------------------------------|-----------|---------|--------------|
 | `aarch64-unknown-linux-gnu`         | ✓         | ✓       | ✗            |
-| `powerpc64le-unknown-linux-gnu`     | ✓         | ✓       | ✗            |
-| `x86_64-unknown-linux-gnu` (tier 1) | ✓         | ✓       | ✓            |
+| `x86_64-unknown-linux-gnu`          | ✓         | ✓       | ✓            |
+| `x86_64-unknown-linux-musl`         | ✓         | ✗       | ✗            |
 | **MacOSX targets:**                 | **build** | **run** | **jemalloc** |
-| `aarch64-apple-darwin`              | ✓         | ✓       | ✗            |
+| `aarch64-apple-darwin`              | ✓         | ✗       | ✗            |
 
 ## Features
 
-This crate provides following cargo feature flags:
+`jevmalloc` re-exports every `jevmalloc-sys` feature; see
+[`jevmalloc-sys/README.md`](jevmalloc-sys/README.md#features) for what each one
+passes to `configure`. The default set is `cache_oblivious`,
+`initial_exec_tls` and `unprefixed_malloc_on_supported_platforms`.
 
-* `api` When the `api` feature of this crate is enabled, it also implements the `Alloc`
-trait, allowing usage in collections.
+`jevmalloc` adds `global_hooks`, which calls a user-supplied hook (see
+`jevmalloc::hook`) before entering `jemalloc` on each `GlobalAlloc` operation.
 
-* `default` feature is `background_threads_runtime_support`.
+## Benchmarks
 
-* The `tikv-jemallocator` crate re-exports the [features of the `tikv-jemalloc-sys`
-dependency](https://github.com/tikv/jemallocator/blob/master/jemalloc-sys/README.md#features).
+The roundtrip benchmarks need the unstable `test` harness, so they are gated
+behind `--cfg bench` and are not built by an ordinary `cargo build`:
+
+```shell
+RUSTFLAGS='--cfg bench' cargo +nightly bench -p jevmalloc -- <filter>
+```
 
 ## License
 
@@ -91,12 +108,8 @@ at your option.
 ## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in `tikv-jemallocator` by you, as defined in the Apache-2.0 license,
+for inclusion in `jevmalloc` by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
 
-[Latest Version]: https://img.shields.io/crates/v/tikv-jemallocator.svg
-[crates.io]: https://crates.io/crates/tikv-jemallocator
-[docs]: https://docs.rs/tikv-jemallocator/badge.svg
-[docs.rs]: https://docs.rs/tikv-jemallocator/
-[ci]: https://github.com/tikv/jemallocator/actions/workflows/main.yml/badge.svg
-[github actions]: https://github.com/tikv/jemallocator/actions
+[ci]: https://github.com/matrix-construct/jevmalloc/actions/workflows/main.yml/badge.svg
+[github actions]: https://github.com/matrix-construct/jevmalloc/actions
