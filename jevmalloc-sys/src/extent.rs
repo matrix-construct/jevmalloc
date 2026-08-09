@@ -8,16 +8,6 @@
 use libc::c_int;
 use libc::{c_uint, c_void, size_t};
 
-// jemalloc's own `stdbool.h`, reached only under MSVC, defines `bool` as
-// `BOOL`, which is `int`; everywhere else Rust's `bool` matches.
-#[cfg(target_env = "msvc")]
-type c_bool = c_int;
-#[cfg(not(target_env = "msvc"))]
-type c_bool = bool;
-
-/// Extent lifetime management functions.
-pub type extent_hooks_t = extent_hooks_s;
-
 /// Extent lifetime management functions.
 ///
 /// The extent_hooks_t structure comprises function pointers which are described
@@ -72,6 +62,9 @@ pub struct extent_hooks_s {
 	/// mappings, operated on independently.
 	pub merge: Option<extent_merge_t>,
 }
+
+/// Extent lifetime management functions.
+pub type extent_hooks_t = extent_hooks_s;
 
 /// Extent allocation function.
 ///
@@ -243,3 +236,10 @@ pub type extent_merge_t = unsafe extern "C" fn(
 	committed: c_bool,
 	arena_ind: c_uint,
 ) -> c_bool;
+
+// jemalloc's own `stdbool.h`, reached only under MSVC, defines `bool` as
+// `BOOL`, which is `int`; everywhere else Rust's `bool` matches.
+#[cfg(target_env = "msvc")]
+type c_bool = c_int;
+#[cfg(not(target_env = "msvc"))]
+type c_bool = bool;
