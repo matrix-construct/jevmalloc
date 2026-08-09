@@ -7,6 +7,7 @@
 FROM scratch AS source
 
 COPY --link Cargo.toml rustfmt.toml ./
+COPY --link .cargo .cargo
 COPY --link jevmalloc jevmalloc
 COPY --link jevmalloc-sys jevmalloc-sys
 

@@ -109,10 +109,6 @@ jobs:
           {"name": "all (clang)",
            "bake_target": "test", "feat_set": "all", "cc_name": "clang"},
           {"name": "musl",
-
-           "bake_target": "build", "feat_set": "stats",
-           "rust_target": "x86_64-unknown-linux-musl"},
-          {"name": "musl (run)", "soft": true,
            "bake_target": "test", "feat_set": "stats",
            "rust_target": "x86_64-unknown-linux-musl"}
         ]

@@ -58,6 +58,12 @@ Three of these move the C build, which is the point of matrixing them:
 * **`cc_name`.** Selects the compiler `build.rs` hands to `cc`, as
   `CC_<target>`. On a musl target `gcc` resolves to the `musl-gcc` wrapper.
 
+A musl leaf also picks up [`.cargo/config.toml`](../.cargo/config.toml), which
+names `-lc` a second time at the end of the link line. rustc places the standard
+library's own `-lc` ahead of the bundled jemalloc objects and nothing puts
+another after them, so without it every musl test binary fails to link against
+the whole libc surface jemalloc touches.
+
 `JEMALLOC_SYS_WITH_MALLOC_CONF`, `JEMALLOC_SYS_WITH_LG_PAGE`,
 `JEMALLOC_SYS_WITH_LG_HUGEPAGE`, `JEMALLOC_SYS_WITH_LG_QUANTUM` and
 `JEMALLOC_SYS_WITH_LG_VADDR` pass straight through under their real names, so a
@@ -120,8 +126,8 @@ Found by running the matrix, and the reason two cells are not the obvious ones:
 * **`feat_set=all` on musl does not build.** `profiling` reaches
   `src/prof_sys.c`, which includes `<execinfo.h>` under
   `JEMALLOC_PROF_FRAME_POINTER` as its fallback unwinder, and musl has no
-  `execinfo.h`. `profiling_frameptr` does not rescue it. The musl cells
-  therefore use `stats`.
+  `execinfo.h`. `profiling_frameptr` does not rescue it. The musl cell
+  therefore uses `stats`.
 * **`feat_set=none` under `dev` fails jemalloc's suite.**
   `test/unit/double_free` exits with a status the harness does not recognise,
   reported as `Test harness error`, once `--enable-debug` sits on top of
@@ -133,9 +139,9 @@ changes teaches people to ignore reds. They are written down here instead.
 
 ## Cells that report without gating
 
-The support table marks three combinations as not passing: the jemalloc suite
-on aarch64, and the test suites on musl and Darwin. CI runs each of them anyway
-with `soft` set, which reports the result without failing the run. The table is
+The support table marks two combinations as not passing: the jemalloc suite on
+aarch64, and the test suite on Darwin. CI runs each of them anyway with `soft`
+set, which reports the result without failing the run. The table is
 then something measured on every push rather than something asserted once, and
 a cell that starts passing is visible instead of invisible.
 

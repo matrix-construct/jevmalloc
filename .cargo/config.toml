@@ -1,0 +1,20 @@
+# Naming libc a second time, at the end of the link line.
+#
+# rustc emits the standard library's `-lc` at the position of the `libc` crate
+# it comes with, and on a musl target that lands ahead of `libjevmalloc_sys`
+# and the jemalloc objects bundled into it. Their references to `pthread_*`,
+# `sched_getcpu`, `atexit`, `strtok` and the rest then meet an archive the
+# linker has already walked past, and `-nodefaultlibs` means the compiler
+# driver contributes no trailing `-lc` of its own. Every statically linked musl
+# test binary fails on the whole libc surface jemalloc touches.
+#
+# The archive is fine and the objects are fine; only the order is wrong, so
+# naming it once more is enough and is inert wherever the order already works.
+#
+# RUSTFLAGS in the environment replaces this key rather than appending to it, so
+# a musl build that sets its own has to carry the flag along. The `bench` and
+# `doc` leaves in docker/bake.hcl are the ones that set it, and neither runs on
+# a musl target.
+
+[target.'cfg(target_env = "musl")']
+rustflags = ["-C", "link-arg=-lc"]

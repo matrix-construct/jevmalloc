@@ -71,7 +71,7 @@ force, using `mallctl("arenas.lookup")` as the ownership oracle.
 |-------------------------------------|-----------|---------|--------------|
 | `aarch64-unknown-linux-gnu`         | ✓         | ✓       | ✗            |
 | `x86_64-unknown-linux-gnu`          | ✓         | ✓       | ✓            |
-| `x86_64-unknown-linux-musl`         | ✓         | ✗       | ✗            |
+| `x86_64-unknown-linux-musl`         | ✓         | ✓       | ✗            |
 | **MacOSX targets:**                 | **build** | **run** | **jemalloc** |
 | `aarch64-apple-darwin`              | ✓         | ✗       | ✗            |
 
