@@ -1,0 +1,80 @@
+# syntax=docker/dockerfile:1
+
+# The source tree, as an allowlist. Everything a cargo leaf below can read is
+# listed here, so a README, workflow or bake edit cannot invalidate a single
+# cargo layer. `jevmalloc-sys/jemalloc` is the vendored C submodule; it must be
+# checked out or build.rs fails when it copies the tree into OUT_DIR.
+FROM scratch AS source
+
+COPY --link Cargo.toml rustfmt.toml ./
+COPY --link jevmalloc jevmalloc
+COPY --link jevmalloc-sys jevmalloc-sys
+
+# One generic cargo runner, parameterized by the command and the environment.
+#
+# There is deliberately no shared CARGO_TARGET_DIR cache mount. Each leaf builds
+# its own jemalloc from scratch, which is what makes the C-build matrix mean
+# anything: JEMALLOC_SYS_RUN_JEMALLOC_TESTS is not watched by build.rs (see its
+# comment), so a leaf that inherited a warm target dir would report a cache hit
+# as a pass. The C build is ~25s; the toolchain layer above is what gets cached.
+FROM input AS cargo
+ARG rust_toolchain
+ARG rust_target
+ARG RUSTUP_HOME
+ARG CARGO_HOME
+ARG cargo_cmd
+ARG cargo_args
+ARG nprocs
+
+# Pass-through knobs, all lowercase and inert. build.rs reads the real
+# JEMALLOC_SYS_* names with `if let Ok(..)`, which accepts a set-but-empty
+# variable and hands configure a flag with no argument (`--with-lg-quantum=`
+# breaks the size-class tables outright). ARG and ENV have no conditional form,
+# so the real names are exported below only when a leaf actually set one.
+# An unset ARG is not an empty one either, hence the `:-` on each read.
+ARG cc_env_name
+ARG cc_bin
+ARG malloc_conf
+ARG lg_page
+ARG lg_hugepage
+ARG lg_quantum
+ARG lg_vaddr
+ARG run_jemalloc_tests
+ARG rustflags
+ARG rustdocflags
+
+WORKDIR /usr/src/jevmalloc
+COPY --link --from=source / .
+
+ENV RUSTUP_HOME="${RUSTUP_HOME}"
+ENV CARGO_HOME="${CARGO_HOME}"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+ENV CARGO_TARGET_DIR="/usr/src/jevmalloc/target"
+ENV CARGO_TERM_COLOR="always"
+ENV CARGO_BUILD_JOBS="${nprocs}"
+ENV RUST_BACKTRACE="1"
+
+RUN \
+--mount=type=cache,dst=${CARGO_HOME}/registry,id=jevmalloc-cargo-registry,sharing=locked \
+--mount=type=cache,dst=${CARGO_HOME}/git,id=jevmalloc-cargo-git,sharing=locked \
+<<EOF
+    set -eux
+
+    set_env() {
+        if test -n "$2"; then
+            export "$1=$2"
+        fi
+    }
+
+    set_env "${cc_env_name}" "${cc_bin}"
+    set_env JEMALLOC_SYS_WITH_MALLOC_CONF "${malloc_conf:-}"
+    set_env JEMALLOC_SYS_WITH_LG_PAGE "${lg_page:-}"
+    set_env JEMALLOC_SYS_WITH_LG_HUGEPAGE "${lg_hugepage:-}"
+    set_env JEMALLOC_SYS_WITH_LG_QUANTUM "${lg_quantum:-}"
+    set_env JEMALLOC_SYS_WITH_LG_VADDR "${lg_vaddr:-}"
+    set_env JEMALLOC_SYS_RUN_JEMALLOC_TESTS "${run_jemalloc_tests:-}"
+    set_env RUSTFLAGS "${rustflags:-}"
+    set_env RUSTDOCFLAGS "${rustdocflags:-}"
+
+    rustup run "${rust_toolchain}" cargo ${cargo_cmd} ${cargo_args}
+EOF

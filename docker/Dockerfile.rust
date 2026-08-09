@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1
+
+# The toolchain layer. This is the environment cache: rustup, the toolchain and
+# its components are a layer keyed on (system, toolchain, target), so a source
+# change never re-installs them, and every leaf below shares one copy.
+
+FROM input AS rustup
+ARG host_triple
+ARG rustup_version="1.29.0"
+ARG RUST_HOME
+
+WORKDIR ${RUST_HOME}
+RUN <<EOF
+    set -eux
+
+    url="https://static.rust-lang.org/rustup/archive"
+    curl -S -O -s "${url}/${rustup_version}/${host_triple}/rustup-init"
+    chmod a+rx rustup-init
+EOF
+
+FROM input AS rust
+ARG host_triple
+ARG rust_toolchain
+ARG rust_target
+ARG rustup_components
+ARG rustup_profile="minimal"
+ARG RUST_HOME
+ARG RUSTUP_HOME
+ARG CARGO_HOME
+
+WORKDIR ${RUST_HOME}
+ENV RUSTUP_HOME="${RUSTUP_HOME}"
+ENV CARGO_HOME="${CARGO_HOME}"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN \
+--mount=type=cache,dst=${RUSTUP_HOME}/downloads,id=jevmalloc-rustup-dl,sharing=locked \
+<<EOF
+    set -eux
+
+    ./rustup-init -y \
+        --quiet \
+        --profile "${rustup_profile}" \
+        --default-host "${host_triple}" \
+        --default-toolchain none \
+        --no-modify-path
+
+    rm rustup-init
+
+    # Installing the toolchain and its components in one command, rather than
+    # a bare install followed by `component add`, is what lets rustup fall back
+    # to the most recent nightly that actually ships rustfmt and clippy. A
+    # nightly missing either is routine and would otherwise red the whole run.
+    components=""
+    for c in ${rustup_components}; do components="${components} --component ${c}"; done
+    rustup toolchain install "${rust_toolchain}" \
+        --profile "${rustup_profile}" \
+        ${components}
+
+    rustup default "${rust_toolchain}"
+
+    # A target equal to the host is already installed; adding it again is a
+    # no-op, so this one line covers both the native and the cross-libc legs.
+    rustup target add --toolchain "${rust_toolchain}" "${rust_target}"
+
+    chmod -R a+rw "${CARGO_HOME}" "${RUSTUP_HOME}"
+EOF

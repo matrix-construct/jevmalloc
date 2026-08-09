@@ -1,0 +1,16 @@
+# The build context is narrowed again by the `source` stage in
+# docker/Dockerfile.cargo, which copies an explicit allowlist. This file only
+# keeps the transfer small; the allowlist is what stops a docs- or CI-only
+# commit from invalidating every cargo layer.
+
+target
+Cargo.lock
+
+.git
+.github
+docker
+*.md
+LICENSE-*
+
+.vscode
+.idea

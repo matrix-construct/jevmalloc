@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+
+# Base system: the distribution plus the C toolchain jemalloc's configure and
+# make need. Root of every other layer.
+
+ARG sys_name=debian
+ARG sys_version=trixie-slim
+
+FROM ${sys_name}:${sys_version} AS system
+ARG packages
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV DEBIAN_FRONTEND="${DEBIAN_FRONTEND}"
+
+# apt's own download cache is a cache mount rather than a layer, so adding a
+# package to `packages` re-resolves without re-downloading the world.
+RUN \
+--mount=type=cache,dst=/var/cache/apt,id=jevmalloc-apt-cache,sharing=locked \
+--mount=type=cache,dst=/var/lib/apt,id=jevmalloc-apt-lib,sharing=locked \
+<<EOF
+    set -eux
+
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+        > /etc/apt/apt.conf.d/keep-downloaded
+    rm -f /etc/apt/apt.conf.d/docker-clean
+
+    apt-get -y update
+    apt-get -y install --no-install-recommends ${packages}
+EOF

@@ -85,6 +85,21 @@ passes to `configure`. The default set is `cache_oblivious`,
 `jevmalloc` adds `global_hooks`, which calls a user-supplied hook (see
 `jevmalloc::hook`) before entering `jemalloc` on each `GlobalAlloc` operation.
 
+## Testing
+
+The table above is what CI measures, and it measures it through
+[`docker/`](docker/README.md). Every CI job is one bake target plus a few
+environment variables, so any of them reproduces locally:
+
+```shell
+./docker/bake.sh test                                    # the default regime
+feat_set=prefixed ./docker/bake.sh test                  # the other symbol regime
+feat_set=all cargo_profile=release ./docker/bake.sh suite # jemalloc's own suite
+```
+
+`docker/README.md` explains the axes, which of them move the C build, and why
+no build artifact is cached.
+
 ## Benchmarks
 
 The roundtrip benchmarks need the unstable `test` harness, so they are gated

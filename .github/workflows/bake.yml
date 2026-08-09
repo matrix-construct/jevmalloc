@@ -1,0 +1,70 @@
+name: Bake
+
+# The generic executor. Every job in main.yml is a fan-out of this one, which
+# checks out the tree and hands one cell's axes to docker/bake.sh. All build
+# logic lives in docker/; this file only chooses a machine and an environment.
+
+on:
+  workflow_call:
+    inputs:
+      matrix:
+        description: 'JSON array of cells. Each needs a `name` and a `bake_target`; any axis key it omits takes the bake.hcl default, and `soft` marks a cell report-only.'
+        type: string
+        required: true
+      arch:
+        description: 'x64 or arm64.'
+        type: string
+        default: x64
+      timeout:
+        description: 'Per-cell ceiling, in minutes. A hung C build otherwise holds a runner until GitHub gives up on it hours later.'
+        type: number
+        default: 45
+      max_parallel:
+        description: 'Cells in flight at once. The self-hosted x64 pool is a single shared machine, so this bounds our footprint on it rather than adding cores.'
+        type: number
+        default: 4
+
+permissions:
+  contents: read
+
+jobs:
+  bake:
+    name: ${{matrix.bake_target}}
+
+    # Self-hosted runners are reachable only from trusted events. A pull request
+    # can carry a fork's code, and the x64 pool is the same machine that builds
+    # Tuwunel, so those runs stay on GitHub-hosted machines.
+    runs-on: >-
+      ${{ github.event_name == 'pull_request'
+          && (inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest')
+          || (inputs.arch == 'arm64' && 'aws' || 'het') }}
+
+    timeout-minutes: ${{inputs.timeout}}
+    continue-on-error: ${{matrix.soft || false}}
+
+    strategy:
+      fail-fast: false
+      max-parallel: ${{inputs.max_parallel}}
+      matrix:
+        include: ${{fromJSON(inputs.matrix)}}
+
+    steps:
+      # No sparse-checkout: the x64 runners are persistent, and its state
+      # survives the action's own clean, leaving later jobs missing files.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+
+      - name: ${{matrix.bake_target}}
+        run: docker/bake.sh "${{matrix.bake_target}}"
+        env:
+          CI: true
+          cc_name: ${{matrix.cc_name}}
+          cargo_profile: ${{matrix.cargo_profile}}
+          feat_set: ${{matrix.feat_set}}
+          rust_target: ${{matrix.rust_target}}
+          rust_toolchain: ${{matrix.rust_toolchain}}
+          JEMALLOC_SYS_WITH_MALLOC_CONF: ${{matrix.malloc_conf}}
+          JEMALLOC_SYS_WITH_LG_PAGE: ${{matrix.lg_page}}
+          JEMALLOC_SYS_WITH_LG_QUANTUM: ${{matrix.lg_quantum}}

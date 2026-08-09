@@ -1,102 +1,212 @@
 name: CI
 
+# The driver. It names the cells and nothing else: every cell is a bake target
+# from docker/bake.hcl, run by .github/workflows/bake.yml, and reproducible
+# locally with the same axes. See docker/README.md.
+
 on:
-  pull_request:
-    branches:
-      - 'main'
   push:
     branches:
-      - 'main'
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      bake_target:
+        description: 'standard runs the whole matrix, as a push does. Anything else runs that one target as a single cell, which is how the jemalloc knobs below are reached.'
+        type: choice
+        options: [standard, test, build, suite, clippy, fmt, doc, bench]
+        default: standard
+      feat_set:
+        description: 'Feature regime.'
+        type: choice
+        options: [all, default, stats, prefixed, none]
+        default: all
+      cargo_profile:
+        description: 'dev configures jemalloc --enable-debug, release --disable-debug.'
+        type: choice
+        options: [dev, release]
+        default: dev
+      cc_name:
+        type: choice
+        options: [gcc, clang]
+        default: gcc
+      rust_toolchain:
+        type: choice
+        options: [stable, nightly]
+        default: stable
+      arch:
+        type: choice
+        options: [x64, arm64]
+        default: x64
+      malloc_conf:
+        description: 'JEMALLOC_SYS_WITH_MALLOC_CONF. Empty for the default build.'
+        type: string
+      lg_page:
+        description: 'JEMALLOC_SYS_WITH_LG_PAGE. Empty for the default build.'
+        type: string
+      lg_quantum:
+        description: 'JEMALLOC_SYS_WITH_LG_QUANTUM. Below the platform default this is under-alignment UB, and tests/flags.rs is expected to catch it.'
+        type: string
+
+# The x64 pool is ten runner slots on a single machine that also carries
+# Tuwunel's CI. The jobs below are therefore sequenced rather than fanned out at
+# once, so our peak is one job's max-parallel and not their sum, and a
+# superseded run is cancelled rather than left to queue behind. main is exempt:
+# its history is what the support table is read against.
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: ${{github.ref != 'refs/heads/main'}}
+
+permissions:
+  contents: read
 
 jobs:
+  lint:
+    name: Lint
+    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    uses: ./.github/workflows/bake.yml
+    with:
+      timeout: 30
+      matrix: |
+        [
+          {"name": "Format", "bake_target": "fmt"},
+          {"name": "Docs", "bake_target": "doc"},
+          {"name": "Benches", "bake_target": "bench"},
+          {"name": "Clippy",
+           "bake_target": "clippy", "rust_toolchain": "stable", "feat_set": "all"},
+          {"name": "Clippy (nightly)", "soft": true,
+           "bake_target": "clippy", "rust_toolchain": "nightly", "feat_set": "all"}
+        ]
+
+  # Both symbol regimes have to run, not just build: jevmalloc-sys carries tests
+  # that only compile under `prefixed` and others that only compile without it,
+  # and jevmalloc/tests/ffi.rs is not compiled at all unless `stats` is on.
   test:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.tag }}
+    name: Test
+    needs: lint
+    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    uses: ./.github/workflows/bake.yml
+    with:
+      timeout: 45
+      max_parallel: 4
+      matrix: |
+        [
+          {"name": "default", "bake_target": "test", "feat_set": "default"},
+          {"name": "stats", "bake_target": "test", "feat_set": "stats"},
+          {"name": "prefixed", "bake_target": "test", "feat_set": "prefixed"},
+          {"name": "prefixed (release)",
+           "bake_target": "test", "feat_set": "prefixed", "cargo_profile": "release"},
+          {"name": "none", "bake_target": "test", "feat_set": "none"},
+          {"name": "all", "bake_target": "test", "feat_set": "all"},
+          {"name": "all (release)",
+           "bake_target": "test", "feat_set": "all", "cargo_profile": "release"},
+          {"name": "all (nightly)",
+           "bake_target": "test", "feat_set": "all", "rust_toolchain": "nightly"},
+          {"name": "all (clang)",
+           "bake_target": "test", "feat_set": "all", "cc_name": "clang"},
+          {"name": "musl",
+
+           "bake_target": "build", "feat_set": "stats",
+           "rust_target": "x86_64-unknown-linux-musl"},
+          {"name": "musl (run)", "soft": true,
+           "bake_target": "test", "feat_set": "stats",
+           "rust_target": "x86_64-unknown-linux-musl"}
+        ]
+
+  # jemalloc's own ~1800-case suite, over the configure flags our features
+  # actually move. `all` and `none` are the two extremes of the --enable/--disable
+  # spread, and the cargo profile is the --enable-debug axis. `none` appears only
+  # under release: its suite aborts at test/unit/double_free once --enable-debug
+  # is added on top of everything-disabled. See docker/README.md.
+  suite:
+    name: jemalloc
+    needs: test
+    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    uses: ./.github/workflows/bake.yml
+    with:
+      timeout: 60
+      max_parallel: 3
+      matrix: |
+        [
+          {"name": "all (debug)",
+           "bake_target": "suite", "feat_set": "all", "cargo_profile": "dev"},
+          {"name": "all (ndebug)",
+           "bake_target": "suite", "feat_set": "all", "cargo_profile": "release"},
+          {"name": "none (ndebug)",
+           "bake_target": "suite", "feat_set": "none", "cargo_profile": "release"},
+          {"name": "default (ndebug)",
+           "bake_target": "suite", "feat_set": "default", "cargo_profile": "release"},
+          {"name": "all (clang)",
+           "bake_target": "suite", "feat_set": "all", "cc_name": "clang"}
+        ]
+
+  # The README's support table marks aarch64 as building and running but not
+  # passing jemalloc's suite. The first two cells gate that claim; the third
+  # reports on it without gating, so the table is measured rather than assumed.
+  arm:
+    name: aarch64
+    needs: lint
+    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    uses: ./.github/workflows/bake.yml
+    with:
+      arch: arm64
+      timeout: 60
+      max_parallel: 1
+      matrix: |
+        [
+          {"name": "all", "bake_target": "test", "feat_set": "all"},
+          {"name": "prefixed", "bake_target": "test", "feat_set": "prefixed"},
+          {"name": "jemalloc", "soft": true,
+           "bake_target": "suite", "feat_set": "all"}
+        ]
+
+  # The one leg outside bake: there is no macOS docker host, self-hosted or
+  # otherwise. Build-only, matching the support table; the run column is probed
+  # without gating.
+  darwin:
+    name: Darwin (${{matrix.name}})
+    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    continue-on-error: ${{matrix.soft || false}}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: x86_64-unknown-linux-gnu (stable)
-            target: x86_64-unknown-linux-gnu
-            rust: stable
-            tag: ubuntu-latest
-            run_tests: 1
-            jemalloc_tests: 1
-          - name: x86_64-unknown-linux-gnu (nightly)
-            target: x86_64-unknown-linux-gnu
-            rust: nightly
-            tag: ubuntu-latest
-            run_tests: 1
-            jemalloc_tests: 1
-          - name: aarch64-unknown-linux-gnu (stable)
-            target: aarch64-unknown-linux-gnu
-            rust: stable
-            tag: ubuntu-24.04-arm
-            run_tests: 1
-            jemalloc_tests: 0
-          - name: x86_64-unknown-linux-musl
-            target: x86_64-unknown-linux-musl
-            rust: stable
-            tag: ubuntu-latest
-            run_tests: 0
-            jemalloc_tests: 0
-          - name: aarch64-apple-darwin (stable)
-            target: aarch64-apple-darwin
-            rust: stable
-            tag: macos-latest
-            run_tests: 0
-            jemalloc_tests: 0
-    env:
-      TARGET: ${{ matrix.target }}
+          - name: build
+            cargo_cmd: build
+          - name: test
+            cargo_cmd: test
+            soft: true
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: install
-        run: |
-          rustup default ${{ matrix.rust }}
-          rustup target add "$TARGET"
-          if [ "$TARGET" = "x86_64-unknown-linux-musl" ]; then
-            sudo apt-get update && sudo apt-get install -y musl-tools
-          fi
-      - name: build
-        run: cargo build --workspace --target "$TARGET" --all-features
-      # The unprefixed regime is the default; the prefixed one is a distinct
-      # link, so both are exercised.
-      - name: test (unprefixed)
-        if: matrix.run_tests == 1
-        run: cargo test --workspace --target "$TARGET" --features stats
-      - name: test (prefixed)
-        if: matrix.run_tests == 1
-        run: cargo test --workspace --target "$TARGET" --no-default-features --features stats
-      - name: test (all features)
-        if: matrix.run_tests == 1
-        run: cargo test --workspace --target "$TARGET" --all-features
-      # jemalloc's own suite: the real signal after a source bump, on the
-      # targets the README's jemalloc column marks passing. The build script
-      # does not watch the env var, so a distinct target-dir guarantees the
-      # cache miss that makes it run.
-      - name: jemalloc test suite
-        if: matrix.jemalloc_tests == 1
-        env:
-          JEMALLOC_SYS_RUN_JEMALLOC_TESTS: 1
-        run: cargo build -p jevmalloc-sys --target "$TARGET" --features stats,profiling,fill --target-dir target/jemalloc-check
+          fetch-depth: 1
 
-  check:
-    name: Rustfmt and Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      # rustfmt.toml sets unstable options, so formatting requires nightly.
-      - run: rustup default nightly && rustup component add rustfmt clippy
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-features --all-targets -- -D warnings
-      # The benches are stripped without --cfg bench; type-check them here.
-      - run: cargo check -p jevmalloc --benches
-        env:
-          RUSTFLAGS: --cfg bench
-      - run: cargo doc --workspace --all-features --no-deps
-        env:
-          RUSTDOCFLAGS: --cfg jevmalloc_docs
+      - name: cargo ${{matrix.cargo_cmd}}
+        run: cargo ${{matrix.cargo_cmd}} --workspace --all-features
+
+  dispatch:
+    name: Dispatch
+    if: github.event_name == 'workflow_dispatch' && inputs.bake_target != 'standard'
+    uses: ./.github/workflows/bake.yml
+    with:
+      arch: ${{inputs.arch}}
+      timeout: 90
+      matrix: |
+        [
+          {"name": "${{inputs.bake_target}} ${{inputs.feat_set}} ${{inputs.cargo_profile}}",
+           "bake_target": "${{inputs.bake_target}}",
+           "feat_set": "${{inputs.feat_set}}",
+           "cargo_profile": "${{inputs.cargo_profile}}",
+           "cc_name": "${{inputs.cc_name}}",
+           "rust_toolchain": "${{inputs.rust_toolchain}}",
+           "malloc_conf": "${{inputs.malloc_conf}}",
+           "lg_page": "${{inputs.lg_page}}",
+           "lg_quantum": "${{inputs.lg_quantum}}"}
+        ]
