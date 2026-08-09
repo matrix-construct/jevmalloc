@@ -1,5 +1,10 @@
 #![cfg(test)]
 
+//! The raw `jevmalloc_sys` entry points, reached with `Jemalloc` installed.
+//!
+//! Covers the extended allocation calls, both `mallctl` addressing modes, by
+//! name and by MIB, and the writer callback `malloc_stats_print` drives.
+
 extern crate jevmalloc_sys as ffi;
 
 use std::ptr;

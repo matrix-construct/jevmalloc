@@ -17,6 +17,10 @@ use libc::{c_void, uintptr_t};
 
 use crate::{Jemalloc, adjust_layout, ffi, ffi::MALLOCX_ZERO, layout_flags};
 
+/// Callbacks run on the way into jemalloc, one slot per allocator entry point.
+///
+/// Each slot is consulted only when `feature = global_hooks` is enabled, and
+/// holds `None` until an application installs one.
 pub mod hook {
 	use super::Layout;
 

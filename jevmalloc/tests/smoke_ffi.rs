@@ -1,5 +1,10 @@
 #![cfg(test)]
 
+//! A round trip through `jevmalloc_sys::malloc` and `free`.
+//!
+//! The test calls the C entry points directly; the global allocator below is
+//! installed only as a workaround, not as the subject.
+
 // Work around https://github.com/gnzlbg/jemallocator/issues/19
 #[global_allocator]
 static A: jevmalloc::Jemalloc = jevmalloc::Jemalloc;

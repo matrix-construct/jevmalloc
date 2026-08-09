@@ -1,5 +1,10 @@
 #![cfg(test)]
 
+//! Ordinary `GlobalAlloc` traffic through `Jemalloc`, including overalignment.
+//!
+//! The overaligned case is rust-lang/rust#45955: an alignment larger than the
+//! allocation's own size still has to hold on every pointer returned.
+
 use std::alloc::{GlobalAlloc, Layout};
 
 use jevmalloc::Jemalloc;

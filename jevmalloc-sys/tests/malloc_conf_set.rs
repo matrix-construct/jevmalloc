@@ -1,10 +1,17 @@
 #![cfg(test)]
 
+//! Defining `malloc_conf` at link time reaches jemalloc's option parser.
+//!
+//! The binary exports its own `malloc_conf`, overriding the definition
+//! jemalloc ships, then reads `opt.stats_print_opts` back through `mallctl` to
+//! show the string was parsed and not merely linked.
+
 union U {
 	x: &'static u8,
 	y: &'static libc::c_char,
 }
 
+/// The configuration string this binary links in, in place of jemalloc's own.
 #[allow(non_upper_case_globals)]
 #[cfg_attr(prefixed, unsafe(export_name = "_rjem_malloc_conf"))]
 #[cfg_attr(not(prefixed), unsafe(no_mangle))]

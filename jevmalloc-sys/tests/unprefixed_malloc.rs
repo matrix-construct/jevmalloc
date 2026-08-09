@@ -1,5 +1,12 @@
 #![cfg(test)]
 
+//! Whether `malloc` carries a prefix follows the `prefixed` cfg the build
+//! script sets.
+//!
+//! Prefixed, the crate's `malloc` is jemalloc's own symbol and must differ
+//! from libc's; unprefixed, jemalloc has taken libc's place and the two
+//! addresses must agree.
+
 #[cfg(prefixed)]
 #[test]
 fn malloc_is_prefixed() {

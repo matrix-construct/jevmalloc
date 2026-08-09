@@ -58,12 +58,15 @@ pub struct Jemalloc;
 /// _Alignof(max_align_t), the malloc-APIs return memory whose alignment is
 /// either the requested size if its a power-of-two, or the next smaller
 /// power-of-two.
+pub const QUANTUM: usize = QUANTUM_VALUE;
+
 #[cfg(any(
 	target_arch = "arm",
 	target_arch = "mips",
 	target_arch = "powerpc"
 ))]
-pub const QUANTUM: usize = 8;
+const QUANTUM_VALUE: usize = 8;
+
 #[cfg(any(
 	target_arch = "x86",
 	target_arch = "x86_64",
@@ -75,7 +78,7 @@ pub const QUANTUM: usize = 8;
 	target_arch = "s390x",
 	target_arch = "sparc64"
 ))]
-pub const QUANTUM: usize = 16;
+const QUANTUM_VALUE: usize = 16;
 
 #[cfg(test)]
 #[global_allocator]

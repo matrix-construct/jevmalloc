@@ -1,5 +1,10 @@
 #![cfg(test)]
 
+//! The typed `ctl` wrapper over `mallctl`, and the naming it demands.
+//!
+//! Reads and writes `epoch` through `Access`, then pins the panics an empty or
+//! non-null-terminated name has to produce.
+
 use std::alloc::{GlobalAlloc, Layout};
 
 use jevmalloc::{

@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+//! `usable_size` reports at least as much as the allocation was asked for.
+
 use jevmalloc::Jemalloc;
 
 #[global_allocator]

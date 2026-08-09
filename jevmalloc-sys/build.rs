@@ -8,6 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! Configures and builds the bundled `jemalloc`, then emits the link
+//! directives and cfgs the crate compiles against.
+//!
+//! The feature set and the `JEMALLOC_SYS_WITH_*` environment variables select
+//! the configure flags; `JEMALLOC_OVERRIDE` skips the build entirely and links
+//! a library supplied by the caller instead.
+
 use std::{
 	env,
 	ffi::OsString,
