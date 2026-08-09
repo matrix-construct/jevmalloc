@@ -67,13 +67,16 @@ force, using `mallctl("arenas.lookup")` as the ownership oracle.
 * `jemalloc`: does `jemalloc`'s own test suite pass on the target
   (`JEMALLOC_SYS_RUN_JEMALLOC_TESTS=1`)?
 
+Every ✓ and ✗ below is measured by a CI cell. `?` marks a combination no cell
+runs, so nothing here is claimed about it.
+
 | Linux targets:                      | build     | run     | jemalloc     |
 |-------------------------------------|-----------|---------|--------------|
-| `aarch64-unknown-linux-gnu`         | ✓         | ✓       | ✗            |
+| `aarch64-unknown-linux-gnu`         | ✓         | ✓       | ✓            |
 | `x86_64-unknown-linux-gnu`          | ✓         | ✓       | ✓            |
-| `x86_64-unknown-linux-musl`         | ✓         | ✓       | ✗            |
+| `x86_64-unknown-linux-musl`         | ✓         | ✓       | ?            |
 | **MacOSX targets:**                 | **build** | **run** | **jemalloc** |
-| `aarch64-apple-darwin`              | ✓         | ✗       | ✗            |
+| `aarch64-apple-darwin`              | ✓         | ✓       | ?            |
 
 ## Features
 

@@ -140,9 +140,9 @@ jobs:
            "bake_target": "suite", "feat_set": "all", "cc_name": "clang"}
         ]
 
-  # The README's support table marks aarch64 as building and running but not
-  # passing jemalloc's suite. The first two cells gate that claim; the third
-  # reports on it without gating, so the table is measured rather than assumed.
+  # The first two cells gate the support table's aarch64 build and run columns.
+  # The third fills in its jemalloc column without gating, since an arm-only
+  # failure in a ~1800-case C suite is one nothing here can reproduce.
   arm:
     name: aarch64
     needs: lint
@@ -161,14 +161,13 @@ jobs:
         ]
 
   # The one leg outside bake: there is no macOS docker host, self-hosted or
-  # otherwise. Build-only, matching the support table; the run column is probed
-  # without gating.
+  # otherwise. The build gates; the run reports without gating, since a macOS
+  # failure is one nothing here can reproduce.
   darwin:
     name: Darwin (${{matrix.name}})
     if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
     runs-on: macos-latest
     timeout-minutes: 45
-    continue-on-error: ${{matrix.soft || false}}
     strategy:
       fail-fast: false
       matrix:
@@ -184,8 +183,16 @@ jobs:
           submodules: true
           fetch-depth: 1
 
+      # Report-only through the step rather than the job, for the reason
+      # bake.yml gives.
       - name: cargo ${{matrix.cargo_cmd}}
+        id: cargo
+        continue-on-error: ${{matrix.soft || false}}
         run: cargo ${{matrix.cargo_cmd}} --workspace --all-features
+
+      - name: Report
+        if: steps.cargo.outcome == 'failure'
+        run: echo "::warning title=Darwin (${{matrix.name}})::report-only cell failed"
 
   dispatch:
     name: Dispatch

@@ -40,7 +40,6 @@ jobs:
           || (inputs.arch == 'arm64' && 'aws' || 'het') }}
 
     timeout-minutes: ${{inputs.timeout}}
-    continue-on-error: ${{matrix.soft || false}}
 
     strategy:
       fail-fast: false
@@ -56,7 +55,14 @@ jobs:
           submodules: true
           fetch-depth: 1
 
+      # `soft` belongs on the step and not on the job. A job carrying
+      # continue-on-error still reports its check run as failed, and the commit
+      # list aggregates check runs rather than the run's own conclusion, so a
+      # report-only cell would hang a red X on a commit whose run reads green.
+      # Failing only the step keeps the job green and the report visible.
       - name: ${{matrix.bake_target}}
+        id: bake
+        continue-on-error: ${{matrix.soft || false}}
         run: docker/bake.sh "${{matrix.bake_target}}"
         env:
           CI: true
@@ -68,3 +74,10 @@ jobs:
           JEMALLOC_SYS_WITH_MALLOC_CONF: ${{matrix.malloc_conf}}
           JEMALLOC_SYS_WITH_LG_PAGE: ${{matrix.lg_page}}
           JEMALLOC_SYS_WITH_LG_QUANTUM: ${{matrix.lg_quantum}}
+
+      # Only reachable for a report-only cell; a gating one has already failed
+      # the job by here. An annotation is what carries the result up to the run
+      # summary now that the job itself stays green.
+      - name: Report
+        if: steps.bake.outcome == 'failure'
+        run: echo "::warning title=${{matrix.name}}::report-only cell failed"

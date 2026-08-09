@@ -139,11 +139,22 @@ changes teaches people to ignore reds. They are written down here instead.
 
 ## Cells that report without gating
 
-The support table marks two combinations as not passing: the jemalloc suite on
-aarch64, and the test suite on Darwin. CI runs each of them anyway with `soft`
-set, which reports the result without failing the run. The table is
-then something measured on every push rather than something asserted once, and
-a cell that starts passing is visible instead of invisible.
+The aarch64 jemalloc suite and the Darwin test run carry `soft`, which reports
+their result without failing the run. Both pass today, and the support table
+says so; they stay report-only because they are the two legs nobody can
+reproduce from a development machine here, so a red in either is a thing to go
+and look at rather than a thing to block on.
+
+`soft` sits on the step and not on the job, which matters more than it sounds.
+A job carrying `continue-on-error` still reports its check run as failed, and
+the commit list aggregates check runs rather than the run's own conclusion, so
+that spelling hangs a red X on a commit whose run reads green. Failing the step
+keeps the job green; a `Report` step then raises a warning annotation, which is
+what carries the result up to the run summary.
+
+Two combinations in the support table have no cell at all: the jemalloc suite
+on musl and on Darwin. They are marked `?` rather than ✗, so the table claims
+only what it measures.
 
 ## Benches
 
