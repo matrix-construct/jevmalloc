@@ -324,7 +324,7 @@ target "fmt" {
 }
 
 target "doc" {
-    description = "Documentation, including the doc-only binding shapes."
+    description = "Documentation."
     name = elem("doc", [sys_name, rust_target])
     tags = [elem_tag("doc", [sys_name, rust_target], "latest")]
     matrix = {
@@ -338,7 +338,6 @@ target "doc" {
     args = merge(leaf_args(sys_name, "gcc", "nightly", rust_target), {
         cargo_cmd = "doc"
         cargo_args = "--workspace --all-features --no-deps --target ${rust_target}"
-        rustdocflags = "--cfg jevmalloc_docs"
     })
 }
 

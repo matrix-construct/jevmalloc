@@ -18,65 +18,6 @@ type c_bool = bool;
 /// Extent lifetime management functions.
 pub type extent_hooks_t = extent_hooks_s;
 
-// Two variants of the struct: the `jevmalloc_docs` one names the type aliases
-// so rustdoc renders them, and the normal one spells the `fn` types out.
-
-#[repr(C)]
-#[cfg(not(jevmalloc_docs))]
-#[doc(hidden)]
-#[allow(missing_docs)]
-#[derive(Copy, Clone, Default)]
-pub struct extent_hooks_s {
-	pub alloc: Option<
-		unsafe extern "C" fn(
-			*mut Self,
-			*mut c_void,
-			size_t,
-			size_t,
-			*mut c_bool,
-			*mut c_bool,
-			c_uint,
-		) -> *mut c_void,
-	>,
-	pub dalloc:
-		Option<unsafe extern "C" fn(*mut Self, *mut c_void, size_t, c_bool, c_uint) -> c_bool>,
-	pub destroy: Option<unsafe extern "C" fn(*mut Self, *mut c_void, size_t, c_bool, c_uint)>,
-	pub commit: Option<
-		unsafe extern "C" fn(*mut Self, *mut c_void, size_t, size_t, size_t, c_uint) -> c_bool,
-	>,
-	pub decommit: Option<
-		unsafe extern "C" fn(*mut Self, *mut c_void, size_t, size_t, size_t, c_uint) -> c_bool,
-	>,
-	pub purge_lazy: Option<
-		unsafe extern "C" fn(*mut Self, *mut c_void, size_t, size_t, size_t, c_uint) -> c_bool,
-	>,
-	pub purge_forced: Option<
-		unsafe extern "C" fn(*mut Self, *mut c_void, size_t, size_t, size_t, c_uint) -> c_bool,
-	>,
-	pub split: Option<
-		unsafe extern "C" fn(
-			*mut Self,
-			*mut c_void,
-			size_t,
-			size_t,
-			size_t,
-			c_bool,
-			c_uint,
-		) -> c_bool,
-	>,
-	pub merge: Option<
-		unsafe extern "C" fn(
-			*mut Self,
-			*mut c_void,
-			size_t,
-			*mut c_void,
-			size_t,
-			c_bool,
-			c_uint,
-		) -> c_bool,
-	>,
-}
-
 /// Extent lifetime management functions.
 ///
 /// The extent_hooks_t structure comprises function pointers which are described
@@ -93,26 +34,42 @@ pub struct extent_hooks_s {
 /// structure is accessed directly by the associated arenas, so it must remain
 /// valid for the entire lifetime of the arenas.
 #[repr(C)]
-#[cfg(jevmalloc_docs)]
 #[derive(Copy, Clone, Default)]
 pub struct extent_hooks_s {
-	#[allow(missing_docs)]
+	/// Obtains a new extent for the arena. The one hook an arena cannot do
+	/// without; leaving it null is not an option.
 	pub alloc: Option<extent_alloc_t>,
-	#[allow(missing_docs)]
+
+	/// Releases an extent, the first and most permanent rung of the cleanup
+	/// cascade. Declining retains the mapping for later reuse.
 	pub dalloc: Option<extent_dalloc_t>,
-	#[allow(missing_docs)]
+
+	/// Tears an extent down unconditionally, reached when an arena is itself
+	/// destroyed and its retained extents go with it.
 	pub destroy: Option<extent_destroy_t>,
-	#[allow(missing_docs)]
+
+	/// Backs a range of an extent with physical memory, run before pages that
+	/// were decommitted are handed out again.
 	pub commit: Option<extent_commit_t>,
-	#[allow(missing_docs)]
+
+	/// Releases the physical memory backing a range of an extent while keeping
+	/// the mapping. Declining leaves the range committed.
 	pub decommit: Option<extent_decommit_t>,
-	#[allow(missing_docs)]
+
+	/// Purges a range of an extent at leisure, leaving its pages in an
+	/// indeterminate state until the purge actually happens.
 	pub purge_lazy: Option<extent_purge_t>,
-	#[allow(missing_docs)]
+
+	/// Purges a range of an extent immediately, so its pages read back
+	/// zero-filled.
 	pub purge_forced: Option<extent_purge_t>,
-	#[allow(missing_docs)]
+
+	/// Divides one extent into two adjacent extents. Declining leaves the
+	/// extent whole, to be operated on as a unit.
 	pub split: Option<extent_split_t>,
-	#[allow(missing_docs)]
+
+	/// Joins two adjacent extents into one. Declining leaves them distinct
+	/// mappings, operated on independently.
 	pub merge: Option<extent_merge_t>,
 }
 

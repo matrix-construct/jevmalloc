@@ -85,7 +85,6 @@ fn main() {
 
 	// this has to occur before the early return when JEMALLOC_OVERRIDE is set
 	println!("cargo::rustc-check-cfg=cfg(prefixed)");
-	println!("cargo::rustc-check-cfg=cfg(jevmalloc_docs)");
 	if use_prefix {
 		println!("cargo:rustc-cfg=prefixed");
 	}

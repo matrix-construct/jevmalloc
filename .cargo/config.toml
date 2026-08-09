@@ -12,9 +12,9 @@
 # naming it once more is enough and is inert wherever the order already works.
 #
 # RUSTFLAGS in the environment replaces this key rather than appending to it, so
-# a musl build that sets its own has to carry the flag along. The `bench` and
-# `doc` leaves in docker/bake.hcl are the ones that set it, and neither runs on
-# a musl target.
+# a musl build that sets its own has to carry the flag along. The `bench` leaf in
+# docker/bake.hcl is the only one that sets it, and it does not run on a musl
+# target.
 
 [target.'cfg(target_env = "musl")']
 rustflags = ["-C", "link-arg=-lc"]
