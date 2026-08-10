@@ -97,6 +97,7 @@ environment variables, so any of them reproduces locally:
 ```shell
 ./docker/bake.sh test                                    # the default regime
 feat_set=prefixed ./docker/bake.sh test                  # the other symbol regime
+feat_set=none ./docker/bake.sh valgrind                  # tests under Memcheck
 feat_set=all cargo_profile=release ./docker/bake.sh suite # jemalloc's own suite
 ```
 

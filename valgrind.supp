@@ -1,0 +1,16 @@
+{
+   std::thread::new() in Rust 1.84+ (C++-mangled)
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   ...
+   fun:_ZN3std6thread7current12init_current*
+}
+{
+   std::thread::new() in Rust 1.93+ (v0-mangled)
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   ...
+   fun:_RNvNtNtCs*_3std6thread7current12init_current
+}

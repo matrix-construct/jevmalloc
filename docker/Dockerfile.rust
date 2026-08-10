@@ -64,3 +64,28 @@ RUN \
 
     chmod -R a+rw "${CARGO_HOME}" "${RUSTUP_HOME}"
 EOF
+
+# Memcheck and its Cargo driver are isolated from the normal toolchain layer,
+# so lint and ordinary test jobs do not install tools they never execute.
+FROM input AS valgrind
+ARG cargo_valgrind_version
+ARG CARGO_HOME
+ARG RUSTUP_HOME
+
+ENV CARGO_HOME="${CARGO_HOME}"
+ENV RUSTUP_HOME="${RUSTUP_HOME}"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN \
+--mount=type=cache,dst=/var/cache/apt,id=jevmalloc-apt-cache,sharing=locked \
+--mount=type=cache,dst=/var/lib/apt,id=jevmalloc-apt-lib,sharing=locked \
+--mount=type=cache,dst=${CARGO_HOME}/registry,id=jevmalloc-cargo-registry,sharing=locked \
+--mount=type=cache,dst=${CARGO_HOME}/git,id=jevmalloc-cargo-git,sharing=locked \
+<<EOF
+    set -eux
+
+    apt-get -y update
+    apt-get -y install --no-install-recommends valgrind
+    cargo install --locked --version "${cargo_valgrind_version}" cargo-valgrind
+
+    chmod -R a+rw "${CARGO_HOME}" "${RUSTUP_HOME}"
+EOF

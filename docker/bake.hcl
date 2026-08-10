@@ -56,6 +56,10 @@ variable "rust_nightly" {
     default = "nightly"
 }
 
+variable "cargo_valgrind_version" {
+    default = "2.4.1"
+}
+
 # The host the rustup installer is fetched for. bake.sh derives this from the
 # machine it runs on; every leg builds natively, nothing cross-builds the host.
 variable "host_triple" {
@@ -189,6 +193,28 @@ target "rust" {
     }
 }
 
+target "valgrind-tools" {
+    description = "Memcheck and its pinned Cargo driver."
+    name = elem("valgrind-tools", [sys_name, rust_toolchain, rust_target])
+    tags = [elem_tag("valgrind-tools", [sys_name, rust_toolchain, rust_target], "latest")]
+    target = "valgrind"
+    dockerfile = "${docker_dir}/Dockerfile.rust"
+    output = ["type=cacheonly"]
+    matrix = {
+        sys_name = jsondecode(sys_names)
+        rust_toolchain = jsondecode(rust_toolchains)
+        rust_target = jsondecode(rust_targets)
+    }
+    contexts = {
+        input = elem("target:rust", [sys_name, rust_toolchain, rust_target])
+    }
+    args = {
+        cargo_valgrind_version = cargo_valgrind_version
+        CARGO_HOME = "/opt/rust/cargo"
+        RUSTUP_HOME = "/opt/rust/rustup"
+    }
+}
+
 ###############################################################################
 #
 # Leaves. Each runs one cargo command and exports nothing; the exit status is
@@ -207,7 +233,7 @@ group "lint" {
 }
 
 group "tests" {
-    targets = ["suite", "test"]
+    targets = ["suite", "test", "valgrind"]
 }
 
 # Not buildable on its own: the concrete leaves below fill in cargo_cmd and
@@ -262,6 +288,25 @@ target "test" {
     args = merge(leaf_args(sys_name, cc_name, rust_toolchain, rust_target), {
         cargo_cmd = "test"
         cargo_args = cargo_workspace_args(rust_target, cargo_profile, feat_set)
+    })
+}
+
+target "valgrind" {
+    description = "Unit, integration and doc tests under Memcheck."
+    name = elem("valgrind", [sys_name, cc_name, rust_toolchain, rust_target, cargo_profile, feat_set])
+    tags = [elem_tag("valgrind", [sys_name, cc_name, rust_toolchain, rust_target, cargo_profile, feat_set], "latest")]
+    matrix = full
+    inherits = ["cargo"]
+    contexts = {
+        input = elem("target:valgrind-tools", [sys_name, rust_toolchain, rust_target])
+    }
+    args = merge(leaf_args(sys_name, cc_name, rust_toolchain, rust_target), {
+        cargo_cmd = "valgrind test"
+        cargo_args = join(" ", [
+            cargo_workspace_args(rust_target, cargo_profile, feat_set),
+            "--no-fail-fast",
+        ])
+        valgrindflags = "--soname-synonyms=somalloc=nouserintercepts"
     })
 }
 

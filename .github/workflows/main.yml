@@ -18,7 +18,7 @@ on:
       bake_target:
         description: 'standard runs the whole matrix, as a push does. Anything else runs that one target as a single cell, which is how the jemalloc knobs below are reached.'
         type: choice
-        options: [standard, test, build, suite, clippy, fmt, doc, bench]
+        options: [standard, test, valgrind, build, suite, clippy, fmt, doc, bench]
         default: standard
       feat_set:
         description: 'Feature regime.'
@@ -113,6 +113,21 @@ jobs:
            "rust_target": "x86_64-unknown-linux-musl"}
         ]
 
+  # Memcheck runs the same workspace unit, integration and doc tests as the
+  # `none` test cell. Keeping this as one semantic regime avoids repeating
+  # the compiler, profile and libc axes already covered above.
+  valgrind:
+    name: Valgrind
+    needs: test
+    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    uses: ./.github/workflows/bake.yml
+    with:
+      timeout: 45
+      matrix: |
+        [
+          {"name": "none", "bake_target": "valgrind", "feat_set": "none"}
+        ]
+
   # jemalloc's own ~1800-case suite, over the configure flags our features
   # actually move. `all` and `none` are the two extremes of the --enable/--disable
   # spread, and the cargo profile is the --enable-debug axis. `none` appears only
@@ -120,7 +135,7 @@ jobs:
   # is added on top of everything-disabled. See docker/README.md.
   suite:
     name: jemalloc
-    needs: test
+    needs: valgrind
     if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
     uses: ./.github/workflows/bake.yml
     with:

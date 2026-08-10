@@ -4,6 +4,7 @@
 #
 #     ./docker/bake.sh fmt
 #     feat_set=prefixed cargo_profile=release ./docker/bake.sh test
+#     feat_set=none ./docker/bake.sh valgrind
 #     cc_name=clang feat_set=all ./docker/bake.sh suite
 #
 # With no target it builds the `default` group, which is lint plus tests, on

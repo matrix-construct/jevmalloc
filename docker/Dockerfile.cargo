@@ -43,6 +43,7 @@ ARG lg_vaddr
 ARG run_jemalloc_tests
 ARG rustflags
 ARG rustdocflags
+ARG valgrindflags
 
 WORKDIR /usr/src/jevmalloc
 COPY --link --from=source / .
@@ -76,6 +77,7 @@ RUN \
     set_env JEMALLOC_SYS_RUN_JEMALLOC_TESTS "${run_jemalloc_tests:-}"
     set_env RUSTFLAGS "${rustflags:-}"
     set_env RUSTDOCFLAGS "${rustdocflags:-}"
+    set_env VALGRINDFLAGS "${valgrindflags:-}"
 
     rustup run "${rust_toolchain}" cargo ${cargo_cmd} ${cargo_args}
 EOF

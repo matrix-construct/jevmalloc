@@ -18,6 +18,7 @@ and call [`bake.sh`](bake.sh).
 |----------|---------------------------------------------------------------------|
 | `build`  | `cargo build --workspace`                                            |
 | `test`   | `cargo test --workspace`, so unit, integration and doc tests         |
+| `valgrind` | the same tests under Memcheck, continuing through every target      |
 | `clippy` | `cargo clippy --all-targets`, denying warnings                       |
 | `fmt`    | `cargo fmt --check`, pinned to nightly by `rustfmt.toml`             |
 | `doc`    | `cargo doc`, with the `jevmalloc_docs` cfg the binding shapes need   |
@@ -25,8 +26,16 @@ and call [`bake.sh`](bake.sh).
 | `suite`  | jemalloc's own suite, about 1800 cases, via `make check`             |
 
 There are three groups: `lint` (`fmt`, `clippy`, `doc`, `bench`), `tests`
-(`test`, `suite`), and `default`, which is both. With no target you get
-`default`, on whatever axes are set.
+(`test`, `valgrind`, `suite`), and `default`, which is both. With no target you
+get `default`, on whatever axes are set.
+
+The gating Valgrind cell uses `feat_set=none`, the prefixed symbol regime, and
+passes `--no-fail-fast` so one report cannot hide later test binaries. The
+dedicated tools layer pins `cargo-valgrind` 2.4.1, whose standard-library
+suppressions cover the v0-mangled `std::thread::current` allocation used by
+current Rust test harnesses. `VALGRINDFLAGS` leaves program-defined allocator
+symbols unintercepted, so Valgrind cannot replace only the unprefixed half of a
+statically linked jemalloc build.
 
 ## Axes
 
