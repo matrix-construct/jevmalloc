@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 //! Proves which allocator services the process.
 //!
 //! The oracle is `mallctl("arenas.lookup")`, which jemalloc 5.3.1 made safe to
@@ -11,11 +9,13 @@
 //! the process dies far from the cause. These tests pin down which of the two
 //! regimes is in force rather than leaving it to be discovered at runtime.
 
-use std::ffi::CString;
-#[cfg(not(prefixed))]
-use std::ptr::null_mut;
+#![cfg(test)]
 
-use jevmalloc_sys as je;
+#[cfg(not(prefixed))]
+use core::ptr::null_mut;
+use std::ffi::CString;
+
+use jevmalloc_sys as ffi;
 use libc::{c_uint, c_void};
 
 /// Verifies the oracle itself.
@@ -35,12 +35,12 @@ fn oracle_rejects_a_stack_address() {
 /// ordinary assertion.
 fn arena_of(ptr: *const c_void) -> Option<c_uint> {
 	// jemalloc has to be initialized before its ctl namespace answers.
-	unsafe { je::free(je::malloc(1)) };
+	unsafe { ffi::free(ffi::malloc(1)) };
 
 	let mut arena: c_uint = c_uint::MAX;
 	let mut len = size_of::<c_uint>();
 	let rc = unsafe {
-		je::mallctl(
+		ffi::mallctl(
 			c"arenas.lookup".as_ptr(),
 			(&raw mut arena).cast::<c_void>(),
 			&raw mut len,
@@ -55,10 +55,10 @@ fn arena_of(ptr: *const c_void) -> Option<c_uint> {
 #[test]
 fn jemalloc_owns_what_jemalloc_allocated() {
 	unsafe {
-		let ptr = je::malloc(1024);
+		let ptr = ffi::malloc(1024);
 
-		assert_owned(ptr, "je::malloc");
-		je::free(ptr);
+		assert_owned(ptr, "ffi::malloc");
+		ffi::free(ptr);
 	}
 }
 
@@ -73,13 +73,13 @@ fn assert_owned(ptr: *const c_void, what: &str) {
 /// is not split.
 #[cfg(not(prefixed))]
 mod unprefixed {
-	use super::{CString, assert_owned, je, null_mut};
+	use super::{CString, assert_owned, ffi, null_mut};
 
 	#[test]
 	fn libc_malloc_is_jemalloc() {
 		assert_eq!(
 			libc::malloc as *const (),
-			je::malloc as *const (),
+			ffi::malloc as *const (),
 			"the libc `malloc` name did not resolve to jemalloc's definition"
 		);
 	}
@@ -107,18 +107,18 @@ mod unprefixed {
 			let dup = libc::strdup(src.as_ptr());
 
 			assert_owned(dup.cast(), "strdup()");
-			je::free(dup.cast());
+			ffi::free(dup.cast());
 
 			let cwd = libc::getcwd(null_mut(), 0);
 
 			assert_owned(cwd.cast(), "getcwd(NULL, 0)");
-			je::free(cwd.cast());
+			ffi::free(cwd.cast());
 
 			let dot = CString::new(".").unwrap();
 			let real = libc::realpath(dot.as_ptr(), null_mut());
 
 			assert_owned(real.cast(), "realpath(.., NULL)");
-			je::free(real.cast());
+			ffi::free(real.cast());
 		}
 	}
 }
@@ -129,13 +129,13 @@ mod unprefixed {
 /// between them is exactly what must not be crossed.
 #[cfg(prefixed)]
 mod prefixed {
-	use super::{CString, arena_of, je};
+	use super::{CString, arena_of, ffi};
 
 	#[test]
 	fn libc_malloc_is_not_jemalloc() {
 		assert_ne!(
 			libc::malloc as *const (),
-			je::malloc as *const (),
+			ffi::malloc as *const (),
 			"a prefixed build still overrode the libc `malloc` name"
 		);
 	}

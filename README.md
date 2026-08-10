@@ -86,7 +86,8 @@ passes to `configure`. The default set is `cache_oblivious`,
 `initial_exec_tls` and `unprefixed_malloc_on_supported_platforms`.
 
 `jevmalloc` adds `global_hooks`, which calls a user-supplied hook (see
-`jevmalloc::hook`) before entering `jemalloc` on each `GlobalAlloc` operation.
+`jevmalloc::global_alloc::hook`) before entering `jemalloc` on each
+`GlobalAlloc` operation.
 
 ## Testing
 

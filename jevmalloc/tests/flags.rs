@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 //! Exercises both layout flag branches across the `GlobalAlloc` surface.
 //!
 //! `layout_flags` drops the alignment bits when a size class already satisfies
@@ -8,7 +6,9 @@
 //! does not. Every case is handed the word it will be allocated with, and
 //! `for_each_case` fails the test if a walk did not visit both branches.
 
-use std::{
+#![cfg(test)]
+
+use core::{
 	alloc::{GlobalAlloc, Layout},
 	ffi::c_int,
 	slice,

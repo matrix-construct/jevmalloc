@@ -1,6 +1,6 @@
-#![cfg(test)]
-
 //! Checks that `usable_size` covers the requested allocation size.
+
+#![cfg(test)]
 
 use jevmalloc::Jemalloc;
 

@@ -41,12 +41,18 @@
 //! [jemalloc_docs]: http://jemalloc.net/jemalloc.3.html
 //! [jemalloc_wiki]: https://github.com/jemalloc/jemalloc/wiki
 //! [jemalloc_mallctl]: http://jemalloc.net/jemalloc.3.html#mallctl_namespace
+
 #![no_std]
-#![allow(non_snake_case, non_camel_case_types, unnecessary_safety_doc)]
-#![deny(missing_docs, broken_intra_doc_links)]
+#![allow(nonstandard_style, non_camel_case_types)]
 
 mod control;
-/// Target classifications used to gate jemalloc support and configuration.
+/// Target classifications gating jemalloc support and configuration.
+///
+/// Every list holds substrings the build script matches against the target
+/// triple with `contains`, so one entry covers each triple carrying that
+/// component. A match decides whether the build proceeds, whether it warns,
+/// and which symbol regime it can offer. The module carries no inner doc of
+/// its own because the build script `include!`s it.
 mod env;
 mod extended;
 mod extent;

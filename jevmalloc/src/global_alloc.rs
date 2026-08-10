@@ -15,12 +15,19 @@
 //! alignment flag only when [`layout_flags`] proves the size class implies it.
 
 pub mod hook;
+pub mod layout;
 
+use libc::{c_int, c_void};
+
+use self::layout::{adjust_layout, layout_flags};
 use super::{
-	GlobalAlloc, Jemalloc, Layout, assert_unchecked, c_void, ffi,
+	Jemalloc, ffi,
 	ffi::MALLOCX_ZERO,
-	layout::{adjust_layout, layout_flags},
-	libc::c_int,
+	std::{
+		alloc::{GlobalAlloc, Layout},
+		cmp,
+		hint::assert_unchecked,
+	},
 };
 
 /// Routes Rust's global allocation operations through jemalloc.

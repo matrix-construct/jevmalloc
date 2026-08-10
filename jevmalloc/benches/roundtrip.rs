@@ -6,6 +6,7 @@
 //! so targeted runs should select a benchmark name. The repository README's
 //! Benchmarks section gives the exact nightly invocation and filter syntax.
 
+#![cfg(test)]
 #![cfg(bench)]
 #![cfg_attr(bench, feature(test))]
 
@@ -17,8 +18,8 @@ use std::{
 	ptr,
 };
 
-use jevmalloc::{Jemalloc, layout_flags};
-use test::Bencher;
+use ::test::Bencher;
+use jevmalloc::{Jemalloc, ffi, layout_flags};
 
 /// Routes benchmark-harness and `GlobalAlloc` traffic through jemalloc.
 #[global_allocator]
@@ -35,11 +36,10 @@ macro_rules! rt {
             #[bench]
             fn [<rt_mallocx_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
                     let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
-                    let ptr = jemalloc::mallocx($size, flags);
+                    let ptr = ffi::mallocx($size, flags);
                     test::black_box(ptr);
-                    jemalloc::sdallocx(ptr, $size, flags);
+                    ffi::sdallocx(ptr, $size, flags);
                 });
             }
 
@@ -47,13 +47,12 @@ macro_rules! rt {
             #[bench]
             fn [<rt_mallocx_nallocx_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
                     let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
-                    let ptr = jemalloc::mallocx($size, flags);
+                    let ptr = ffi::mallocx($size, flags);
                     test::black_box(ptr);
-                    let rsz = jemalloc::nallocx($size, flags);
+                    let rsz = ffi::nallocx($size, flags);
                     test::black_box(rsz);
-                    jemalloc::sdallocx(ptr, rsz, flags);
+                    ffi::sdallocx(ptr, rsz, flags);
                 });
             }
 
@@ -86,13 +85,12 @@ macro_rules! rt {
             #[bench]
             fn [<rt_alloc_sallocx_unused_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
                     let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
-                    let ptr = jemalloc::mallocx($size, flags);
+                    let ptr = ffi::mallocx($size, flags);
                     test::black_box(ptr);
-                    let excess = jemalloc::sallocx(ptr, flags);
+                    let excess = ffi::sallocx(ptr, flags);
                     test::black_box(excess);
-                    jemalloc::sdallocx(ptr, $size, flags);
+                    ffi::sdallocx(ptr, $size, flags);
                 });
             }
 
@@ -100,13 +98,12 @@ macro_rules! rt {
             #[bench]
             fn [<rt_alloc_sallocx_used_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
                     let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
-                    let ptr = jemalloc::mallocx($size, flags);
+                    let ptr = ffi::mallocx($size, flags);
                     test::black_box(ptr);
-                    let excess = jemalloc::sallocx(ptr, flags);
+                    let excess = ffi::sallocx(ptr, flags);
                     test::black_box(excess);
-                    jemalloc::sdallocx(ptr, excess, flags);
+                    ffi::sdallocx(ptr, excess, flags);
                 });
             }
 
@@ -114,11 +111,10 @@ macro_rules! rt {
             #[bench]
             fn [<rt_mallocx_zeroed_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
                     let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
-                    let ptr = jemalloc::mallocx($size, flags | jemalloc::MALLOCX_ZERO);
+                    let ptr = ffi::mallocx($size, flags | ffi::MALLOCX_ZERO);
                     test::black_box(ptr);
-                    jemalloc::sdallocx(ptr, $size, flags);
+                    ffi::sdallocx(ptr, $size, flags);
                 });
             }
 
@@ -126,12 +122,11 @@ macro_rules! rt {
             #[bench]
             fn [<rt_calloc_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
                     let flags = layout_flags(Layout::from_size_align($size, $align).unwrap());
                     test::black_box(flags);
-                    let ptr = jemalloc::calloc(1, $size);
+                    let ptr = ffi::calloc(1, $size);
                     test::black_box(ptr);
-                    jemalloc::sdallocx(ptr, $size, 0);
+                    ffi::sdallocx(ptr, $size, 0);
                 });
             }
 
@@ -142,10 +137,9 @@ macro_rules! rt {
             #[bench]
             fn [<rt_malloc_free_sized_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
-                    let ptr = jemalloc::malloc($size);
+                    let ptr = ffi::malloc($size);
                     test::black_box(ptr);
-                    jemalloc::free_sized(ptr, $size);
+                    ffi::free_sized(ptr, $size);
                 });
             }
 
@@ -156,10 +150,9 @@ macro_rules! rt {
             #[bench]
             fn [<rt_mallocx_free_aligned_sized_size_ $size _align_ $align>](b: &mut Bencher) {
                 b.iter(|| unsafe {
-                    use jevmalloc::ffi as jemalloc;
-                    let ptr = jemalloc::mallocx($size, jemalloc::MALLOCX_ALIGN($align));
+                    let ptr = ffi::mallocx($size, ffi::MALLOCX_ALIGN($align));
                     test::black_box(ptr);
-                    jemalloc::free_aligned_sized(ptr, $align, $size);
+                    ffi::free_aligned_sized(ptr, $align, $size);
                 });
             }
 

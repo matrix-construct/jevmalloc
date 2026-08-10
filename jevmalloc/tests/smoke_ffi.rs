@@ -1,9 +1,9 @@
-#![cfg(test)]
-
 //! Exercises a round trip through `jevmalloc_sys::malloc` and `free`.
 //!
 //! The test calls the C entry points directly; the global allocator below is
 //! installed only as a workaround, not as the subject.
+
+#![cfg(test)]
 
 /// Installs jemalloc globally to avoid
 /// [gnzlbg/jemallocator#19](https://github.com/gnzlbg/jemallocator/issues/19).

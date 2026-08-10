@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 //! Exercises ordinary `GlobalAlloc` traffic, including overaligned layouts.
 //!
 //! The regression in
@@ -7,7 +5,9 @@
 //! requires an alignment larger than the requested size to hold for every
 //! returned pointer.
 
-use std::alloc::{GlobalAlloc, Layout};
+#![cfg(test)]
+
+use core::alloc::{GlobalAlloc, Layout};
 
 use jevmalloc::Jemalloc;
 

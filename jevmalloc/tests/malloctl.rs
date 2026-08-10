@@ -1,11 +1,11 @@
-#![cfg(test)]
-
 //! Exercises the typed `ctl` wrapper and its control-name requirements.
 //!
 //! The tests read and write `epoch` through `Access`, then confirm that empty
 //! and non-null-terminated names are rejected.
 
-use std::alloc::{GlobalAlloc, Layout};
+#![cfg(test)]
+
+use core::alloc::{GlobalAlloc, Layout};
 
 use jevmalloc::{
 	Jemalloc,

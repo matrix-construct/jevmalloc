@@ -11,11 +11,9 @@
 //! ordinary sized deallocations remain eligible for jemalloc's thread-cache
 //! fast path.
 
-use super::{
-	Layout, assert_unchecked, cmp, ffi,
-	ffi::MALLOCX_ALIGN,
-	libc::{c_int, c_void},
-};
+use libc::{c_int, c_void};
+
+use super::{Layout, assert_unchecked, cmp, ffi, ffi::MALLOCX_ALIGN};
 
 /// Gives the platform's fundamental allocation alignment.
 ///

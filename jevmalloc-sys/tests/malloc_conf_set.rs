@@ -1,10 +1,10 @@
-#![cfg(test)]
-
 //! Defining `malloc_conf` at link time reaches jemalloc's option parser.
 //!
 //! The binary exports its own `malloc_conf`, overriding the definition
 //! jemalloc ships, then reads `opt.stats_print_opts` back through `mallctl` to
 //! show the string was parsed and not merely linked.
+
+#![cfg(test)]
 
 union U {
 	x: &'static u8,
@@ -23,21 +23,21 @@ fn malloc_conf_set() {
 	unsafe {
 		assert_eq!(jevmalloc_sys::malloc_conf, malloc_conf);
 
-		let mut ptr: *const libc::c_char = std::ptr::null();
+		let mut ptr: *const libc::c_char = core::ptr::null();
 		let mut ptr_len: libc::size_t = size_of::<*const libc::c_char>() as libc::size_t;
 
 		let r = jevmalloc_sys::mallctl(
 			(&raw const b"opt.stats_print_opts\0"[0]).cast::<libc::c_char>(),
 			(&raw mut ptr).cast::<libc::c_void>(),
 			&raw mut ptr_len,
-			std::ptr::null_mut(),
+			core::ptr::null_mut(),
 			0,
 		);
 
 		assert_eq!(r, 0);
 		assert!(!ptr.is_null());
 
-		let s = std::ffi::CStr::from_ptr(ptr)
+		let s = core::ffi::CStr::from_ptr(ptr)
 			.to_string_lossy()
 			.into_owned();
 

@@ -1,16 +1,13 @@
-#![cfg(test)]
-
 //! Exercises the raw `jevmalloc_sys` entry points with `Jemalloc` installed.
 //!
 //! The tests cover extended allocation calls, both named and MIB control
 //! access, and the writer callback driven by `malloc_stats_print`.
 
-/// Raw allocator bindings exercised by this test crate.
-extern crate jevmalloc_sys as ffi;
+#![cfg(test)]
 
-use std::ptr;
+use core::ptr;
 
-use jevmalloc::Jemalloc;
+use jevmalloc::{Jemalloc, ffi};
 use libc::{c_char, c_void};
 
 /// Keeps Rust allocations and the raw FFI calls on the same allocator.
