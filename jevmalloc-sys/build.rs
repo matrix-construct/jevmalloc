@@ -27,10 +27,12 @@ use rustflags::Flag as RustFlag;
 
 include!("src/env.rs");
 
+/// Writes a diagnostic line to the build script output.
 macro_rules! info {
     ($($args:tt)*) => { println!($($args)*) }
 }
 
+/// Emits a Cargo build warning.
 macro_rules! warning {
     ($arg:tt, $($args:tt)*) => {
         println!(concat!(concat!("cargo:warning=\"", $arg), "\""), $($args)*)
@@ -345,6 +347,7 @@ fn main() {
 	}
 }
 
+/// Adds an enabling or disabling configure argument based on a Cargo feature.
 fn feature_flag(cmd: &mut Command, feature: &str, option: &str) {
 	if env::var(format!("CARGO_FEATURE_{feature}")).is_ok() {
 		info!("CARGO_FEATURE_{feature} set");
@@ -355,6 +358,13 @@ fn feature_flag(cmd: &mut Command, feature: &str, option: &str) {
 	}
 }
 
+/// Runs a command and prints its final 100 log lines if it exits
+/// unsuccessfully.
+///
+/// # Panics
+///
+/// Panics if either command cannot be started, or after either exits
+/// unsuccessfully.
 fn run_and_log(cmd: &mut Command, log_file: &Path) {
 	execute(cmd, || {
 		run(Command::new("tail")
@@ -364,8 +374,18 @@ fn run_and_log(cmd: &mut Command, log_file: &Path) {
 	});
 }
 
+/// Runs a command and requires it to succeed.
+///
+/// # Panics
+///
+/// Panics if the command cannot be started or exits unsuccessfully.
 fn run(cmd: &mut Command) { execute(cmd, || ()); }
 
+/// Executes a command, invoking `on_fail` if it exits unsuccessfully.
+///
+/// # Panics
+///
+/// Panics if the command cannot be started or exits unsuccessfully.
 fn execute(cmd: &mut Command, on_fail: impl FnOnce()) {
 	println!("running: {cmd:?}");
 	let status = match cmd.status() {
@@ -378,6 +398,7 @@ fn execute(cmd: &mut Command, on_fail: impl FnOnce()) {
 	}
 }
 
+/// Translates a Rust target triple into the form expected by configure.
 fn gnu_target(target: &str) -> String {
 	match target {
 		| "i686-pc-windows-msvc" => "i686-pc-win32".to_owned(),
@@ -391,6 +412,7 @@ fn gnu_target(target: &str) -> String {
 	}
 }
 
+/// Selects the make implementation used by the build host.
 fn make_cmd(host: &str) -> &'static str {
 	const GMAKE_HOSTS: &[&str] =
 		&["bitrig", "dragonfly", "freebsd", "netbsd", "openbsd", "chimera-linux"];
@@ -403,6 +425,11 @@ fn make_cmd(host: &str) -> &'static str {
 	}
 }
 
+/// Reads a watched environment variable, preferring its target-prefixed form.
+///
+/// # Panics
+///
+/// Panics if Cargo did not provide a Unicode `TARGET` environment variable.
 fn read_and_watch_env_impl<T, F>(name: &str, env_getter: F) -> Option<T>
 where
 	F: Fn(&str) -> Option<T>,
@@ -423,14 +450,35 @@ where
 	env_getter(name)
 }
 
+/// Reads a watched environment variable as Unicode.
+///
+/// # Errors
+///
+/// Returns [`env::VarError::NotPresent`] if neither form can be read as
+/// Unicode.
+///
+/// # Panics
+///
+/// Panics if Cargo did not provide a Unicode `TARGET` environment variable.
 fn read_and_watch_env(name: &str) -> Result<String, env::VarError> {
 	read_and_watch_env_impl(name, |n| env::var(n).ok()).ok_or(env::VarError::NotPresent)
 }
 
+/// Reads a watched environment variable as an operating-system string.
+///
+/// # Panics
+///
+/// Panics if Cargo did not provide a Unicode `TARGET` environment variable.
 fn read_and_watch_env_os(name: &str) -> Option<OsString> {
 	read_and_watch_env_impl(name, |n| env::var_os(n))
 }
 
+/// Copies a directory tree into `dst`.
+///
+/// # Errors
+///
+/// Returns an error if a directory cannot be read or created, or a file cannot
+/// be copied.
 fn copy_recursively(src: &Path, dst: &Path) -> io::Result<()> {
 	if !dst.exists() {
 		fs::create_dir_all(dst)?;
@@ -448,6 +496,11 @@ fn copy_recursively(src: &Path, dst: &Path) -> io::Result<()> {
 	Ok(())
 }
 
+/// Reads a required Unicode environment variable.
+///
+/// # Panics
+///
+/// Panics if the variable is missing or is not valid Unicode.
 fn expect_env(name: &str) -> String {
 	env::var(name).unwrap_or_else(|_| panic!("{name} was not set"))
 }

@@ -239,7 +239,9 @@ pub type extent_merge_t = unsafe extern "C" fn(
 
 // jemalloc's own `stdbool.h`, reached only under MSVC, defines `bool` as
 // `BOOL`, which is `int`; everywhere else Rust's `bool` matches.
+/// ABI representation of the boolean type used by jemalloc extent hooks.
 #[cfg(target_env = "msvc")]
 type c_bool = c_int;
+/// ABI representation of the boolean type used by jemalloc extent hooks.
 #[cfg(not(target_env = "msvc"))]
 type c_bool = bool;

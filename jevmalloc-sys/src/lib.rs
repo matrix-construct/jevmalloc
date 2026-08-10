@@ -46,6 +46,7 @@
 #![deny(missing_docs, broken_intra_doc_links)]
 
 mod control;
+/// Target classifications used to gate jemalloc support and configuration.
 mod env;
 mod extended;
 mod extent;
