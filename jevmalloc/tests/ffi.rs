@@ -23,10 +23,13 @@ fn test_basic_alloc() {
 
 		let mut ptr = ffi::mallocx(100, 0);
 		assert!(!ptr.is_null());
+
 		assert_eq!(exp_size, ffi::malloc_usable_size(ptr));
+
 		ptr = ffi::rallocx(ptr, 50, 0);
 		let size = ffi::xallocx(ptr, 30, 20, 0);
 		assert!(size >= 50);
+
 		ffi::sdallocx(ptr, 50, 0);
 	}
 }
@@ -34,6 +37,7 @@ fn test_basic_alloc() {
 #[test]
 fn test_mallctl() {
 	let ptr = unsafe { ffi::mallocx(100, 0) };
+
 	let mut allocated: usize = 0;
 	let mut val_len = size_of_val(&allocated);
 	let field = "stats.allocated\0";
@@ -88,5 +92,6 @@ fn test_stats() {
 	unsafe {
 		ffi::malloc_stats_print(Some(write_cb), (&raw mut ctx).cast::<c_void>(), ptr::null());
 	};
+
 	assert_ne!(ctx.called_times, 0, "print should be triggered at lease once.");
 }

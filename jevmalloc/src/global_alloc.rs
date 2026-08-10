@@ -8,38 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::{
-	alloc::{GlobalAlloc, Layout},
-	hint::assert_unchecked,
+pub mod hook;
+
+use super::{
+	GlobalAlloc, Jemalloc, Layout, assert_unchecked, c_void, ffi,
+	ffi::MALLOCX_ZERO,
+	layout::{adjust_layout, layout_flags},
+	uintptr_t,
 };
-
-use libc::{c_void, uintptr_t};
-
-use crate::{Jemalloc, adjust_layout, ffi, ffi::MALLOCX_ZERO, layout_flags};
-
-/// Callbacks run on the way into jemalloc, one slot per allocator entry point.
-///
-/// Each slot is consulted only when `feature = global_hooks` is enabled, and
-/// holds `None` until an application installs one.
-pub mod hook {
-	use super::Layout;
-
-	/// When `feature = global_hooks` enabled, called prior to entering
-	/// jemalloc.
-	pub static mut ALLOC: Option<fn(Layout)> = None;
-
-	/// When `feature = global_hooks` enabled, called prior to entering
-	/// jemalloc.
-	pub static mut ALLOC_ZEROED: Option<fn(Layout)> = None;
-
-	/// When `feature = global_hooks` enabled, called prior to entering
-	/// jemalloc.
-	pub static mut REALLOC: Option<fn(Layout, *const u8, usize)> = None;
-
-	/// When `feature = global_hooks` enabled, called prior to entering
-	/// jemalloc.
-	pub static mut DEALLOC: Option<fn(Layout, *const u8)> = None;
-}
 
 unsafe impl GlobalAlloc for Jemalloc {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
