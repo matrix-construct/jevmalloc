@@ -1,23 +1,22 @@
-//! Raw `unsafe` access to the `malloctl` API.
+//! Low-level typed access to jemalloc's `mallctl` API.
+//!
+//! Named and MIB controls are exposed without validating the selected Rust
+//! type. Prefer [`super::Name`] and [`super::Mib`] when their safe access
+//! traits cover the control.
 
 use libc::c_char;
 
 use super::{Result, error::cvt};
 use crate::std::{ptr, slice};
 
-/// Translates `name` to a `mib` (Management Information Base)
+/// Translates a null-terminated control `name` into a MIB.
 ///
-/// `mib`s are used to avoid repeated name lookups for applications that
-/// repeatedly query the same portion of `jemalloc`s `mallctl` namespace.
+/// A Management Information Base avoids repeated name lookups when callers
+/// access the same part of jemalloc's control namespace.
 ///
-/// On success, `mib` contains an array of integers. It is possible to pass
-/// `mib` with a length smaller than the number of period-separated name
-/// components. This results in a partial MIB that can be used as the basis for
-/// constructing a complete MIB.
-///
-/// For name components that are integers (e.g. the `2` in `arenas.bin.2.size`),
-/// the corresponding MIB component will always be that integer. Therefore, it
-/// is legitimate to construct code like the following:
+/// A destination shorter than the number of period-separated components
+/// receives a partial MIB that can be completed by the caller. Numeric name
+/// components retain their numeric value in the corresponding MIB component.
 ///
 /// ```
 /// #[global_allocator]
@@ -30,14 +29,23 @@ use crate::std::{ptr, slice};
 /// 		let mut mib = [0; 4];
 /// 		let nbins: c_uint = raw::read(b"arenas.nbins\0").unwrap();
 /// 		raw::name_to_mib(b"arenas.bin.0.size\0", &mut mib).unwrap();
-/// 		for i in 0..4 {
+/// 		for i in 0..usize::try_from(nbins).unwrap() {
 /// 			mib[2] = i;
-/// 			let bin_size: usize = raw::read_mib(&mut mib).unwrap();
+/// 			let bin_size: usize = raw::read_mib(&mib).unwrap();
 /// 			println!("arena bin {} has size {}", i, bin_size);
 /// 		}
 /// 	}
 /// }
 /// ```
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects or cannot translate `name`.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or does not end in NUL, or if jemalloc reports a
+/// successful translation shorter than `mib`.
 pub fn name_to_mib(name: &[u8], mib: &mut [usize]) -> Result<()> {
 	unsafe {
 		validate_name(name);
@@ -53,23 +61,31 @@ pub fn name_to_mib(name: &[u8], mib: &mut [usize]) -> Result<()> {
 	}
 }
 
-/// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and reads its value.
+/// Reads the value addressed by `mib` as `T`.
 ///
-/// The [`name_to_mib`] API translates a string of the key (e.g. `arenas.nbins`)
-/// to a `mib` (Management Information Base).
+/// Use [`name_to_mib`] to translate a control name when the same key will be
+/// read repeatedly.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the MIB, access, or output size.
+///
+/// # Panics
+///
+/// Panics if jemalloc succeeds without reporting exactly `size_of::<T>()`
+/// output bytes.
 ///
 /// # Safety
 ///
-/// This function is `unsafe` because it is possible to use it to construct an
-/// invalid `T`, for example, by passing `T=bool` for a key returning `u8`. The
-/// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
-/// `u8` can.
+/// `T` must be layout-compatible with the selected control's output type, and
+/// every successful output must be a valid `T`. A same-sized type with stricter
+/// validity requirements, such as `u8` read as `bool`, can cause undefined
+/// behavior.
 ///
-/// `arena.<i>.name`, new in `jemalloc` 5.3.1, additionally inverts the read
-/// convention: it treats the read slot as the address of a caller-allocated
-/// `ARENA_NAME_LEN` (32) byte buffer and copies the name through it, so
-/// reading it as `T = *const c_char` hands `jemalloc` an uninitialized
-/// pointer to write through.
+/// `arena.<i>.name` instead treats the read slot as a pointer to a
+/// caller-allocated buffer of at least 32 bytes (`ARENA_NAME_LEN`). Reading
+/// that control as `*const c_char` lets jemalloc write through an uninitialized
+/// pointer.
 pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
 	unsafe {
 		let mut len = size_of::<T>();
@@ -89,21 +105,31 @@ pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
 	}
 }
 
-/// Uses the null-terminated string `name` as key to the _MALLCTL NAMESPACE_ and
-/// reads its value.
+/// Reads the value addressed by the null-terminated control `name` as `T`.
+///
+/// The control name is resolved on every call. Use [`read_mib`] with a cached
+/// MIB for repeated access.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the name, access, or output size.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or does not end in NUL, or if jemalloc succeeds
+/// without reporting exactly `size_of::<T>()` output bytes.
 ///
 /// # Safety
 ///
-/// This function is `unsafe` because it is possible to use it to construct an
-/// invalid `T`, for example, by passing `T=bool` for a key returning `u8`. The
-/// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
-/// `u8` can.
+/// `T` must be layout-compatible with the selected control's output type, and
+/// every successful output must be a valid `T`. A same-sized type with stricter
+/// validity requirements, such as `u8` read as `bool`, can cause undefined
+/// behavior.
 ///
-/// `arena.<i>.name`, new in `jemalloc` 5.3.1, additionally inverts the read
-/// convention: it treats the read slot as the address of a caller-allocated
-/// `ARENA_NAME_LEN` (32) byte buffer and copies the name through it, so
-/// reading it as `T = *const c_char` hands `jemalloc` an uninitialized
-/// pointer to write through.
+/// `arena.<i>.name` instead treats the read slot as a pointer to a
+/// caller-allocated buffer of at least 32 bytes (`ARENA_NAME_LEN`). Reading
+/// that control as `*const c_char` lets jemalloc write through an uninitialized
+/// pointer.
 pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
 	unsafe {
 		validate_name(name);
@@ -124,17 +150,22 @@ pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
 	}
 }
 
-/// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and writes its `value`.
+/// Writes `value` to the control addressed by `mib`.
 ///
-/// The [`name_to_mib`] API translates a string of the key (e.g. `arenas.nbins`)
-/// to a `mib` (Management Information Base).
+/// Use [`name_to_mib`] to translate a control name when the same key will be
+/// written repeatedly.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the MIB, access, or input size.
 ///
 /// # Safety
 ///
-/// This function is `unsafe` because it is possible to use it to construct an
-/// invalid `T`, for example, by passing `T=u8` for a key expecting `bool`. The
-/// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
-/// `u8` can.
+/// `T` must be layout-compatible with the selected control's input type, and
+/// `value` must be valid for that type. Jemalloc reads the supplied bytes as
+/// its declared value type. For a pointer-valued control, the pointee must meet
+/// every control-specific accessibility, aliasing, and lifetime requirement;
+/// any pointer retained by jemalloc must remain valid for that entire period.
 pub unsafe fn write_mib<T>(mib: &[usize], mut value: T) -> Result<()> {
 	unsafe {
 		let len = size_of::<T>();
@@ -155,15 +186,26 @@ pub unsafe fn write_mib<T>(mib: &[usize], mut value: T) -> Result<()> {
 	}
 }
 
-/// Uses the null-terminated string `name` as the key to the _MALLCTL NAMESPACE_
-/// and writes it `value`
+/// Writes `value` to the null-terminated control `name`.
+///
+/// The control name is resolved on every call. Use [`write_mib`] with a cached
+/// MIB for repeated access.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the name, access, or input size.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or does not end in NUL.
 ///
 /// # Safety
 ///
-/// This function is `unsafe` because it is possible to use it to construct an
-/// invalid `T`, for example, by passing `T=u8` for a key expecting `bool`. The
-/// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
-/// `u8` can.
+/// `T` must be layout-compatible with the selected control's input type, and
+/// `value` must be valid for that type. Jemalloc reads the supplied bytes as
+/// its declared value type. For a pointer-valued control, the pointee must meet
+/// every control-specific accessibility, aliasing, and lifetime requirement;
+/// any pointer retained by jemalloc must remain valid for that entire period.
 pub unsafe fn write<T>(name: &[u8], mut value: T) -> Result<()> {
 	unsafe {
 		validate_name(name);
@@ -185,18 +227,26 @@ pub unsafe fn write<T>(name: &[u8], mut value: T) -> Result<()> {
 	}
 }
 
-/// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and writes its `value`
-/// returning its previous value.
+/// Replaces the value addressed by `mib` and returns its previous value as `T`.
 ///
-/// The [`name_to_mib`] API translates a string of the key (e.g. `arenas.nbins`)
-/// to a `mib` (Management Information Base).
+/// Use [`name_to_mib`] to translate a control name when the same key will be
+/// updated repeatedly.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the MIB, access, or value size.
+///
+/// # Panics
+///
+/// Panics only if the internal `size_of::<T>()` consistency assertion fails.
 ///
 /// # Safety
 ///
-/// This function is `unsafe` because it is possible to use it to construct an
-/// invalid `T`, for example, by passing `T=u8` for a key expecting `bool`. The
-/// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
-/// `u8` can.
+/// `T` must be layout-compatible with both the selected control's input and
+/// output types. `in_value` must be a valid input representation, and every
+/// successful call must write exactly `size_of::<T>()` initialized bytes that
+/// form a valid `T`. Pointer inputs and outputs must meet all control-specific
+/// pointee accessibility, aliasing, and lifetime requirements.
 pub unsafe fn update_mib<T: Copy>(mib: &[usize], mut in_value: T) -> Result<T> {
 	unsafe {
 		let in_len = size_of::<T>();
@@ -233,15 +283,28 @@ pub unsafe fn update_mib<T: Copy>(mib: &[usize], mut in_value: T) -> Result<T> {
 	}
 }
 
-/// Uses the null-terminated string `name` as key to the _MALLCTL NAMESPACE_ and
-/// writes its `value` returning its previous value.
+/// Replaces the value addressed by `name` and returns its previous value as
+/// `T`.
+///
+/// The null-terminated control name is resolved on every call. Use
+/// [`update_mib`] with a cached MIB for repeated access.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the name, access, or value size.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or does not end in NUL, or if jemalloc succeeds
+/// without reporting exactly `size_of::<T>()` output bytes.
 ///
 /// # Safety
 ///
-/// This function is `unsafe` because it is possible to use it to construct an
-/// invalid `T`, for example, by passing `T=u8` for a key expecting `bool`. The
-/// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
-/// `u8` can.
+/// `T` must be layout-compatible with both the selected control's input and
+/// output types. `in_value` must be a valid input representation, and every
+/// successful output must be a valid `T`. Pointer inputs and outputs must meet
+/// all control-specific pointee accessibility, aliasing, and lifetime
+/// requirements.
 pub unsafe fn update<T: Copy>(name: &[u8], mut in_value: T) -> Result<T> {
 	unsafe {
 		validate_name(name);
@@ -279,31 +342,28 @@ pub unsafe fn update<T: Copy>(name: &[u8], mut in_value: T) -> Result<T> {
 	}
 }
 
-/// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and reads its value.
+/// Reads the NUL-terminated byte string pointer addressed by `mib`.
 ///
-/// The [`name_to_mib`] API translates a string of the key (e.g. `arenas.nbins`)
-/// to a `mib` (Management Information Base).
+/// The returned slice includes its trailing NUL byte and carries a static
+/// lifetime. Use [`name_to_mib`] to cache the MIB for repeated access.
+/// `arena.<i>.name` is excluded because its read slot contains a caller-owned
+/// buffer of at least 32 bytes rather than an output pointer.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the MIB, access, or pointer size.
+///
+/// # Panics
+///
+/// Panics if jemalloc returns a null pointer or succeeds with an unexpected
+/// pointer size.
 ///
 /// # Safety
 ///
-/// This function is unsafe because if the key does not return a pointer to a
-/// null-terminated string the behavior is undefined.
-///
-/// For example, a key for a `u64` value can be used to read a pointer on 64-bit
-/// platform, where this pointer will point to the address denoted by the `u64`s
-/// representation. Also, a key to a `*mut extent_hooks_t` will return a pointer
-/// that will not point to a null-terminated string.
-///
-/// This function needs to compute the length of the string by looking for the
-/// null-terminator: `\0`. This requires reading the memory behind the pointer.
-///
-/// If the pointer is invalid (e.g. because it was converted from a `u64` that
-/// does not represent a valid address), reading the string to look for `\0`
-/// will dereference a non-dereferenceable pointer, which is undefined behavior.
-///
-/// If the pointer is valid but it does not point to a null-terminated string,
-/// looking for `\0` will read garbage and might end up reading out-of-bounds,
-/// which is undefined behavior.
+/// The selected control must return a non-null pointer to readable,
+/// NUL-terminated bytes. Its storage must remain valid and immutable for the
+/// lifetime of the returned reference; scanning an invalid or unterminated
+/// pointer is undefined behavior.
 pub unsafe fn read_str_mib(mib: &[usize]) -> Result<&'static [u8]> {
 	unsafe {
 		let ptr: *const c_char = read_mib(mib)?;
@@ -311,49 +371,54 @@ pub unsafe fn read_str_mib(mib: &[usize]) -> Result<&'static [u8]> {
 	}
 }
 
-/// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and writes its `value`.
+/// Writes a static NUL-terminated byte string pointer to `mib`.
 ///
-/// The [`name_to_mib`] API translates a string of the key (e.g. `arenas.nbins`)
-/// to a `mib` (Management Information Base).
+/// Use [`name_to_mib`] when the same key will be written repeatedly.
+///
+/// # Warning
+///
+/// The MIB must identify a control whose input is a C string pointer. This safe
+/// signature cannot validate the numeric MIB; selecting another pointer-sized
+/// control can make jemalloc dereference or retain an invalid pointer.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the MIB, access, or pointer size.
 ///
 /// # Panics
 ///
-/// If `value` is not a non-empty null-terminated string.
+/// Panics if `value` is empty or does not end in NUL.
 pub fn write_str_mib(mib: &[usize], value: &'static [u8]) -> Result<()> {
 	assert!(!value.is_empty(), "value cannot be empty");
 	assert_eq!(*value.last().unwrap(), b'\0');
-	// This is safe because `value` will always point to a null-terminated
-	// string, which makes it safe for all key value types: pointers to
-	// null-terminated strings, pointers, pointer-sized integers, etc.
+	// The validated static bytes satisfy the C string pointer passed to the raw
+	// writer.
 	unsafe { write_mib(mib, value.as_ptr().cast::<c_char>()) }
 }
 
-/// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and writes its `value`
-/// returning its previous value.
+/// Replaces the string pointer addressed by `mib` and returns its previous
+/// bytes.
 ///
-/// The [`name_to_mib`] API translates a string of the key (e.g. `arenas.nbins`)
-/// to a `mib` (Management Information Base).
+/// The returned slice includes its trailing NUL byte and carries a static
+/// lifetime. Use [`name_to_mib`] to cache the MIB for repeated access.
+/// `arena.<i>.name` is excluded because its old-value slot contains a
+/// caller-owned buffer of at least 32 bytes rather than an output pointer.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the MIB, access, or pointer size.
+///
+/// # Panics
+///
+/// Panics if jemalloc returns a null previous-value pointer or the internal
+/// fixed-size consistency assertion fails.
 ///
 /// # Safety
 ///
-/// This function is unsafe because if the key does not return a pointer to a
-/// null-terminated string the behavior is undefined.
-///
-/// For example, a key for a `u64` value can be used to read a pointer on 64-bit
-/// platform, where this pointer will point to the address denoted by the `u64`s
-/// representation. Also, a key to a `*mut extent_hooks_t` will return a pointer
-/// that will not point to a null-terminated string.
-///
-/// This function needs to compute the length of the string by looking for the
-/// null-terminator: `\0`. This requires reading the memory behind the pointer.
-///
-/// If the pointer is invalid (e.g. because it was converted from a `u64` that
-/// does not represent a valid address), reading the string to look for `\0`
-/// will dereference a non-dereferenceable pointer, which is undefined behavior.
-///
-/// If the pointer is valid but it does not point to a null-terminated string,
-/// looking for `\0` will read garbage and might end up reading out-of-bounds,
-/// which is undefined behavior.
+/// `value` must end in NUL, and the selected control must accept its pointer as
+/// the new value. The control must return a non-null pointer to readable,
+/// NUL-terminated bytes whose storage remains valid and immutable for the
+/// lifetime of the returned reference.
 pub unsafe fn update_str_mib(mib: &[usize], value: &'static [u8]) -> Result<&'static [u8]> {
 	unsafe {
 		let ptr: *const c_char = update_mib(mib, value.as_ptr().cast::<c_char>())?;
@@ -361,29 +426,28 @@ pub unsafe fn update_str_mib(mib: &[usize], value: &'static [u8]) -> Result<&'st
 	}
 }
 
-/// Uses the null-terminated string `name` as key to the _MALLCTL NAMESPACE_ and
-/// reads its value.
+/// Reads the NUL-terminated byte string pointer addressed by `name`.
+///
+/// The returned slice includes its trailing NUL byte and carries a static
+/// lifetime. The null-terminated control name is resolved on every call.
+/// `arena.<i>.name` is excluded because its read slot contains a caller-owned
+/// buffer of at least 32 bytes rather than an output pointer.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the name, access, or pointer size.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or does not end in NUL, if jemalloc returns a null
+/// pointer, or if a successful read reports an unexpected pointer size.
 ///
 /// # Safety
 ///
-/// This function is unsafe because if the key does not return a pointer to a
-/// null-terminated string the behavior is undefined.
-///
-/// For example, a key for a `u64` value can be used to read a pointer on 64-bit
-/// platform, where this pointer will point to the address denoted by the `u64`s
-/// representation. Also, a key to a `*mut extent_hooks_t` will return a pointer
-/// that will not point to a null-terminated string.
-///
-/// This function needs to compute the length of the string by looking for the
-/// null-terminator: `\0`. This requires reading the memory behind the pointer.
-///
-/// If the pointer is invalid (e.g. because it was converted from a `u64` that
-/// does not represent a valid address), reading the string to look for `\0`
-/// will dereference a non-dereferenceable pointer, which is undefined behavior.
-///
-/// If the pointer is valid but it does not point to a null-terminated string,
-/// looking for `\0` will read garbage and might end up reading out-of-bounds,
-/// which is undefined behavior.
+/// The selected control must return a non-null pointer to readable,
+/// NUL-terminated bytes. Its storage must remain valid and immutable for the
+/// lifetime of the returned reference; scanning an invalid or unterminated
+/// pointer is undefined behavior.
 pub unsafe fn read_str(name: &[u8]) -> Result<&'static [u8]> {
 	unsafe {
 		let ptr: *const c_char = read(name)?;
@@ -391,40 +455,55 @@ pub unsafe fn read_str(name: &[u8]) -> Result<&'static [u8]> {
 	}
 }
 
-/// Uses the null-terminated string `name` as key to the _MALLCTL NAMESPACE_ and
-/// writes its `value`.
+/// Writes a static NUL-terminated byte string pointer to `name`.
+///
+/// Use [`write_str_mib`] with a cached MIB for repeated access.
+///
+/// # Warning
+///
+/// The name must identify a control whose input is a C string pointer. This
+/// safe signature does not validate the control's value type; selecting
+/// another pointer-sized control can make jemalloc dereference or retain an
+/// invalid pointer.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the name, access, or pointer size.
+///
+/// # Panics
+///
+/// Panics if `name` or `value` is empty or does not end in NUL.
 pub fn write_str(name: &[u8], value: &'static [u8]) -> Result<()> {
 	assert!(!value.is_empty(), "value cannot be empty");
 	assert_eq!(*value.last().unwrap(), b'\0');
-	// This is safe because `value` will always point to a null-terminated
-	// string, which makes it safe for all key value types: pointers to
-	// null-terminated strings, pointers, pointer-sized integers, etc.
+	// The validated static bytes satisfy the C string pointer passed to the raw
+	// writer.
 	unsafe { write(name, value.as_ptr().cast::<c_char>()) }
 }
 
-/// Uses the null-terminated string `name` as key to the _MALLCTL NAMESPACE_ and
-/// writes its `value` returning its previous value.
+/// Replaces the string pointer addressed by `name` and returns its previous
+/// bytes.
+///
+/// The returned slice includes its trailing NUL byte and carries a static
+/// lifetime. The null-terminated control name is resolved on every call.
+/// `arena.<i>.name` is excluded because its old-value slot contains a
+/// caller-owned buffer of at least 32 bytes rather than an output pointer.
+///
+/// # Errors
+///
+/// Returns an error when jemalloc rejects the name, access, or pointer size.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or does not end in NUL, if jemalloc returns a null
+/// previous-value pointer, or if a successful read reports an unexpected size.
 ///
 /// # Safety
 ///
-/// This function is unsafe because if the key does not return a pointer to a
-/// null-terminated string the behavior is undefined.
-///
-/// For example, a key for a `u64` value can be used to read a pointer on 64-bit
-/// platform, where this pointer will point to the address denoted by the `u64`s
-/// representation. Also, a key to a `*mut extent_hooks_t` will return a pointer
-/// that will not point to a null-terminated string.
-///
-/// This function needs to compute the length of the string by looking for the
-/// null-terminator: `\0`. This requires reading the memory behind the pointer.
-///
-/// If the pointer is invalid (e.g. because it was converted from a `u64` that
-/// does not represent a valid address), reading the string to look for `\0`
-/// will dereference a non-dereferenceable pointer, which is undefined behavior.
-///
-/// If the pointer is valid but it does not point to a null-terminated string,
-/// looking for `\0` will read garbage and might end up reading out-of-bounds,
-/// which is undefined behavior.
+/// `value` must end in NUL, and the selected control must accept its pointer as
+/// the new value. The control must return a non-null pointer to readable,
+/// NUL-terminated bytes whose storage remains valid and immutable for the
+/// lifetime of the returned reference.
 pub unsafe fn update_str(name: &[u8], value: &'static [u8]) -> Result<&'static [u8]> {
 	unsafe {
 		let ptr: *const c_char = update(name, value.as_ptr().cast::<c_char>())?;
@@ -432,17 +511,19 @@ pub unsafe fn update_str(name: &[u8], value: &'static [u8]) -> Result<&'static [
 	}
 }
 
-/// Converts a non-empty null-terminated character string at `ptr` into a valid
-/// null-terminated UTF-8 string.
+/// Builds a byte slice, including its NUL terminator, from a C string pointer.
+///
+/// The scan uses `strlen`, and no UTF-8 validation is performed. The returned
+/// slice carries a static lifetime.
 ///
 /// # Panics
 ///
-/// If `ptr.is_null()`.
+/// Panics if `ptr` is null.
 ///
 /// # Safety
 ///
-/// If `ptr` does not point to a null-terminated character string the behavior
-/// is undefined.
+/// `ptr` must be readable through its first NUL byte. The referenced storage
+/// must remain valid and immutable for the lifetime of the returned slice.
 unsafe fn ptr2str(ptr: *const c_char) -> &'static [u8] {
 	unsafe {
 		assert!(!ptr.is_null(), "attempt to convert a null-ptr to a UTF-8 string");
@@ -451,22 +532,49 @@ unsafe fn ptr2str(ptr: *const c_char) -> &'static [u8] {
 	}
 }
 
+/// Checks that a control name is nonempty and NUL-terminated.
+///
+/// Embedded NUL bytes are accepted because only the final byte is validated.
+///
+/// # Panics
+///
+/// Panics if `name` is empty or its final byte is not NUL.
 fn validate_name(name: &[u8]) {
 	assert!(!name.is_empty(), "empty byte string");
 	assert_eq!(*name.last().unwrap(), b'\0', "non-null terminated byte string");
 }
 
+/// Provides stack storage that C may initialize as `T`.
+///
+/// The unit field permits construction without first creating a `T`. Reading
+/// the value field is valid only after the FFI operation fully initializes it.
 union MaybeUninit<T: Copy> {
+	/// Constructs the storage without initializing a `T`.
+	///
+	/// The value field remains unreadable until C writes a valid `T` into the
+	/// same storage.
 	init: (),
+
+	/// Holds the value written by C.
+	///
+	/// Reading this field requires proof that every byte and validity invariant
+	/// of `T` was initialized.
 	maybe_uninit: T,
 }
 
 #[cfg(test)]
+/// Tests private conversions used by the raw control accessors.
+///
+/// Coverage focuses on preserving the trailing NUL byte in returned slices.
 mod tests {
 	use super::*;
 
+	/// Verifies that `ptr2str` includes the trailing NUL byte.
+	///
+	/// The cases cover an empty C string and a string containing repeated
+	/// spaces.
 	#[test]
-	#[cfg(not(target_arch = "mips64"))] // FIXME: SIGFPE
+	#[cfg(not(target_arch = "mips64"))] // Disabled because this test triggers SIGFPE.
 	fn test_ptr2str() {
 		unsafe {
 			let empty = ptr2str(c"".as_ptr());

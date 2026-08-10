@@ -38,6 +38,7 @@ missing_abi = "warn"
 #missing_copy_implementations = "warn"
 #missing_debug_implementations = "warn"
 missing_docs = "warn"
+missing_unsafe_on_extern = "warn"
 non_ascii_idents = "warn"
 rust_2021_incompatible_closure_captures = "warn"
 rust_2021_incompatible_or_patterns = "warn"
@@ -93,9 +94,9 @@ inline_always = { level = "allow", priority = 1 }
 map_unwrap_or = { level = "allow", priority = 1 }
 match_bool = { level = "allow", priority = 1 }
 match_same_arms = { level = "allow", priority = 1 }
-missing_docs_in_private_items = { level = "allow", priority = 1 }
-missing_errors_doc = { level = "allow", priority = 1 }
-missing_panics_doc = { level = "allow", priority = 1 }
+missing_docs_in_private_items = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
 module_name_repetitions = { level = "allow", priority = 1 }
 needless_continue = { level = "allow", priority = 1 }
 no_effect_underscore_binding = { level = "allow", priority = 1 }
@@ -151,7 +152,6 @@ literal_string_with_formatting_args = { level = "allow", priority = 1 }
 # some sadness
 renamed_and_removed_lints = "allow"
 as_conversions = "allow"
-undocumented_unsafe_blocks = "allow"
 should_panic_without_expect = "allow"
 cast_possible_wrap = "allow"
 redundant_feature_names = "allow"

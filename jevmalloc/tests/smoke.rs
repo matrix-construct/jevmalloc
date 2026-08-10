@@ -1,17 +1,21 @@
 #![cfg(test)]
 
-//! Ordinary `GlobalAlloc` traffic through `Jemalloc`, including overalignment.
+//! Exercises ordinary `GlobalAlloc` traffic, including overaligned layouts.
 //!
-//! The overaligned case is rust-lang/rust#45955: an alignment larger than the
-//! allocation's own size still has to hold on every pointer returned.
+//! The regression in
+//! [rust-lang/rust#45955](https://github.com/rust-lang/rust/issues/45955)
+//! requires an alignment larger than the requested size to hold for every
+//! returned pointer.
 
 use std::alloc::{GlobalAlloc, Layout};
 
 use jevmalloc::Jemalloc;
 
+/// Routes test-harness and explicit allocations through jemalloc.
 #[global_allocator]
 static A: Jemalloc = Jemalloc;
 
+/// Checks that an ordinary vector allocation succeeds through jemalloc.
 #[test]
 #[allow(clippy::reserve_after_initialization)]
 fn smoke() {
@@ -20,11 +24,15 @@ fn smoke() {
 	a.push(3);
 }
 
-/// https://github.com/rust-lang/rust/issues/45955
+/// Checks allocations whose requested alignment exceeds their size.
+///
+/// This covers the regression described in
+/// [rust-lang/rust#45955](https://github.com/rust-lang/rust/issues/45955).
 #[test]
 fn overaligned() {
 	let size = 8;
-	let align = 16; // greater than size
+	// Deliberately exceed the requested size to exercise the regression.
+	let align = 16;
 	let iterations = 100;
 	unsafe {
 		let pointers: Vec<_> = (0..iterations)
@@ -38,7 +46,7 @@ fn overaligned() {
 			assert_eq!((ptr as usize) % align, 0, "Got a pointer less aligned than requested");
 		}
 
-		// Clean up
+		// Return every live allocation with the same layout used to create it.
 		for &ptr in &pointers {
 			Jemalloc.dealloc(ptr, Layout::from_size_align(size, align).unwrap());
 		}

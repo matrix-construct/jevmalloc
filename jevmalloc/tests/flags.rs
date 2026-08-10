@@ -1,9 +1,9 @@
 #![cfg(test)]
 
-//! Both branches of the layout flag word, over the whole `GlobalAlloc` surface.
+//! Exercises both layout flag branches across the `GlobalAlloc` surface.
 //!
 //! `layout_flags` drops the alignment bits when a size class already satisfies
-//! the alignment, so the allocator has two codepaths: the zero flag word that
+//! the alignment, so the allocator has two paths: the zero flag word that
 //! reaches jemalloc's thread-cache fast path, and the `MALLOCX_ALIGN` word that
 //! does not. Every case is handed the word it will be allocated with, and
 //! `for_each_case` fails the test if a walk did not visit both branches.
@@ -21,19 +21,23 @@ use jevmalloc::{
 	layout_flags,
 };
 
+/// Routes allocations made by the test harness through jemalloc.
 #[global_allocator]
 static A: Jemalloc = Jemalloc;
 
-// Sizes below, at, and well past the quantum, then one past the thread cache
-// and one large enough to be served by an extent rather than a slab.
+/// Spans requests below, at, and well above the allocator quantum.
+///
+/// The 65,536-byte case lies beyond the default thread cache, while the 1 MiB
+/// case is served by an extent rather than a slab.
 const SIZES: [usize; 10] = [1, 8, 16, 17, 64, 100, 512, 4096, 65536, 1 << 20];
 
+/// Power-of-two alignments spanning both sides of [`QUANTUM`].
 const ALIGNS: [usize; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
 
-/// The alignment bits go only where the size class does not already imply
-/// them.
+/// Confirms that only alignments above the quantum retain alignment flags.
 ///
-/// After `adjust_layout` that is exactly an alignment past the quantum.
+/// After [`adjust_layout`], every supported layout at or below [`QUANTUM`] is
+/// already aligned by its size class.
 #[test]
 fn flag_word_follows_the_quantum() {
 	for_each_case(|layout, flags| {
@@ -45,14 +49,18 @@ fn flag_word_follows_the_quantum() {
 	});
 }
 
-/// Walk the size and alignment matrix, handing each case the flag word the
-/// allocator will compute for it.
+/// Visits each supported size and alignment pair with its computed flag word.
 ///
 /// `adjust_layout` asserts that the adjusted size is at least the adjusted
 /// alignment, so a case is in the supported domain when the alignment is
 /// within the quantum or the size already covers it; every layout Rust derives
 /// from a type qualifies, since a type's size is a multiple of its alignment.
 /// The walk fails the test if it did not visit both branches.
+///
+/// # Panics
+///
+/// Panics if a declared pair cannot form a layout or if the matrix does not
+/// exercise both flag branches.
 fn for_each_case(mut case: impl FnMut(Layout, c_int)) {
 	let (fast, aligned) = SIZES
 		.iter()
@@ -79,9 +87,10 @@ fn for_each_case(mut case: impl FnMut(Layout, c_int)) {
 	assert!(aligned > 0, "no case carried an alignment");
 }
 
-/// The substitution is only safe if an unflagged allocation is still aligned.
+/// Confirms that allocations remain aligned on both flag branches.
 ///
-/// Check the pointer itself rather than trusting the size-class argument.
+/// The test checks each returned pointer rather than inferring alignment from
+/// the selected size class.
 #[test]
 fn allocations_are_aligned_on_both_branches() {
 	for_each_case(|layout, flags| unsafe {
@@ -98,9 +107,9 @@ fn allocations_are_aligned_on_both_branches() {
 	});
 }
 
-/// `MALLOCX_ZERO` rides on top of the flag word and must not disturb it.
+/// Confirms that zeroed allocations are aligned and initialized on both paths.
 ///
-/// The zeroed path never has a zero word, so only its deallocation side can
+/// `MALLOCX_ZERO` makes the allocation word nonzero, so only deallocation can
 /// take the fast path; alignment and zeroing must hold on both branches
 /// regardless.
 #[test]
@@ -121,11 +130,10 @@ fn zeroed_allocations_are_aligned_and_zero_on_both_branches() {
 	});
 }
 
-/// Growing and shrinking re-derive the flag word from the new size.
+/// Confirms that growing and shrinking preserve alignment on both flag paths.
 ///
-/// The branch must not move across a `realloc`, because it keys on the
-/// alignment and `realloc` preserves alignment; the shrink floors at the
-/// alignment to stay inside `adjust_layout`'s domain.
+/// The branch is determined by alignment, which `realloc` preserves. Shrinks
+/// are floored at that alignment to remain in [`adjust_layout`]'s domain.
 #[test]
 fn reallocations_are_aligned_on_both_branches() {
 	for_each_case(|layout, flags| unsafe {
@@ -146,12 +154,10 @@ fn reallocations_are_aligned_on_both_branches() {
 	});
 }
 
-/// The substitution swaps `MALLOCX_ALIGN(QUANTUM)` for a zero flag word, so
-/// the two must agree on every size class the swap can reach.
+/// Confirms that dropping quantum alignment preserves the selected size class.
 ///
-/// The sweep covers every small class and the first large ones; at or past
-/// the quantum every class is quantum-aligned, which is the invariant the
-/// whole change rests on.
+/// The sweep covers every small class and the first large classes. At or above
+/// the quantum, every selected class must already be quantum-aligned.
 #[test]
 fn dropping_the_alignment_keeps_the_size_class() {
 	for size in QUANTUM..=65536 {
@@ -162,12 +168,11 @@ fn dropping_the_alignment_keeps_the_size_class() {
 	}
 }
 
-/// `layout_flags` hardcodes the platform quantum, so the library is unsound on
-/// a build whose real quantum is smaller.
+/// Confirms that jemalloc's configured quantum covers the Rust-side constant.
 ///
 /// `JEMALLOC_SYS_WITH_LG_QUANTUM` can lower it at configure time; this turns
-/// such a build into a deterministic failure instead of silent
-/// under-alignment.
+/// an incompatible build into a deterministic test failure instead of silent
+/// underalignment.
 #[test]
 fn jemalloc_quantum_covers_the_rust_quantum() {
 	let quantum: usize = b"arenas.quantum\0".name().read().unwrap();

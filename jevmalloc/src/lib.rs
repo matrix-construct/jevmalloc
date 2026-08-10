@@ -8,20 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Bindings for jemalloc as an allocator
+//! A Rust global allocator backed by jemalloc.
 //!
-//! This crate provides bindings to jemalloc as a memory allocator for Rust.
-//! It mainly exports one type, `Jemalloc`, which implements the `GlobalAlloc`
-//! trait and is suitable both as a memory allocator and as a global allocator.
-//! It also re-exports the raw C bindings as [`ffi`], and wraps jemalloc's
-//! control and introspection interface in [`ctl`].
+//! [`Jemalloc`] implements [`GlobalAlloc`] and can service the process-wide
+//! `#[global_allocator]` slot. The [`ctl`] module wraps jemalloc's control and
+//! introspection API, while [`ffi`] re-exports the underlying C bindings.
 
 #![no_std]
 
-/// Raw bindings to jemalloc
+/// Re-exports the raw jemalloc bindings.
 ///
-/// Everything `jevmalloc-sys` exports, re-exported verbatim: the C entry
-/// points, the `MALLOCX_*` flag helpers, and the FFI types.
+/// The module exposes every item from `jevmalloc-sys`, including C entry
+/// points, `MALLOCX_*` flag helpers, and foreign-function types. Callers must
+/// uphold the safety contracts documented by that crate.
 pub mod ffi {
 	pub use ::jevmalloc_sys::*;
 }
@@ -43,13 +42,18 @@ pub use self::{
 	layout::{QUANTUM, adjust_layout, layout_flags, usable_size},
 };
 
-/// Handle to the jemalloc allocator
+/// Selects jemalloc as a Rust global allocator.
 ///
-/// It implements [`GlobalAlloc`](core::alloc::GlobalAlloc); install it as the
-/// `#[global_allocator]` to route every Rust allocation through jemalloc.
+/// Install this unit type in the `#[global_allocator]` slot to route Rust
+/// allocations through jemalloc. Its [`GlobalAlloc`] implementation uses the
+/// extended allocation API exported by [`ffi`].
 #[derive(Debug)]
 pub struct Jemalloc;
 
+/// Installs jemalloc for the crate's unit tests.
+///
+/// The test allocator exercises the same process-wide entry points exposed to
+/// downstream users. It is compiled only for this crate's unit-test target.
 #[cfg(test)]
 #[global_allocator]
 static ALLOC: Jemalloc = Jemalloc;

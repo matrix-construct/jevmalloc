@@ -1,12 +1,14 @@
 #![cfg(test)]
 
-//! `usable_size` reports at least as much as the allocation was asked for.
+//! Checks that `usable_size` covers the requested allocation size.
 
 use jevmalloc::Jemalloc;
 
+/// Routes the boxed test value through jemalloc.
 #[global_allocator]
 static A: Jemalloc = Jemalloc;
 
+/// Checks that a boxed `u32` has at least four usable bytes.
 #[test]
 fn smoke() {
 	let a = Box::new(3_u32);

@@ -1,9 +1,8 @@
-//! `jemalloc` control and introspection.
+//! Typed control and introspection for jemalloc.
 //!
-//! `jemalloc` offers a powerful introspection and control interface through the
-//! `mallctl` function. It can be used to tune the allocator, take heap dumps,
-//! and retrieve statistics. This module wraps it as the raw typed accessors in
-//! [`raw`], the [`Name`]/[`Mib`] key indices, and the error type.
+//! Jemalloc exposes allocator settings, maintenance commands, and statistics
+//! through its `mallctl` namespace. Typed [`Name`] and [`Mib`] accessors sit
+//! beside the lower-level [`raw`] interface and their shared error type.
 
 mod error;
 mod keys;
@@ -15,7 +14,7 @@ pub use self::{
 };
 use crate::std::result;
 
-/// Result of a `mallctl` operation.
+/// The result of a jemalloc control operation.
 ///
-/// The error wraps the non-zero `errno` value the call returned.
+/// A failed operation retains the nonzero status returned by jemalloc.
 pub type Result<T> = result::Result<T, Error>;

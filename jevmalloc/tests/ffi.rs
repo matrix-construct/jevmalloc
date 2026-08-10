@@ -1,10 +1,11 @@
 #![cfg(test)]
 
-//! The raw `jevmalloc_sys` entry points, reached with `Jemalloc` installed.
+//! Exercises the raw `jevmalloc_sys` entry points with `Jemalloc` installed.
 //!
-//! Covers the extended allocation calls, both `mallctl` addressing modes, by
-//! name and by MIB, and the writer callback `malloc_stats_print` drives.
+//! The tests cover extended allocation calls, both named and MIB control
+//! access, and the writer callback driven by `malloc_stats_print`.
 
+/// Raw allocator bindings exercised by this test crate.
 extern crate jevmalloc_sys as ffi;
 
 use std::ptr;
@@ -12,9 +13,11 @@ use std::ptr;
 use jevmalloc::Jemalloc;
 use libc::{c_char, c_void};
 
+/// Keeps Rust allocations and the raw FFI calls on the same allocator.
 #[global_allocator]
 static A: Jemalloc = Jemalloc;
 
+/// Checks allocation, resizing, size queries, and sized deallocation.
 #[test]
 fn test_basic_alloc() {
 	unsafe {
@@ -34,6 +37,7 @@ fn test_basic_alloc() {
 	}
 }
 
+/// Checks that named and MIB reads report the same allocated byte count.
 #[test]
 fn test_mallctl() {
 	let ptr = unsafe { ffi::mallocx(100, 0) };
@@ -77,12 +81,19 @@ fn test_mallctl() {
 	unsafe { ffi::sdallocx(ptr, 100, 0) };
 }
 
+/// Checks that `malloc_stats_print` invokes the supplied writer callback.
 #[test]
 fn test_stats() {
+	/// Counts fragments delivered to the statistics writer.
 	struct PrintCtx {
+		/// Number of times the writer callback has run.
 		called_times: usize,
 	}
 
+	/// Counts one writer callback invocation.
+	///
+	/// The fragment pointer is ignored because the test verifies only that
+	/// `malloc_stats_print` drives the callback.
 	extern "C" fn write_cb(ctx: *mut c_void, _: *const c_char) {
 		let print_ctx = unsafe { &mut *ctx.cast::<PrintCtx>() };
 		print_ctx.called_times += 1;

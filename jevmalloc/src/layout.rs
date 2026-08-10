@@ -4,27 +4,30 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! Layout normalization and flag selection for jemalloc calls.
+//!
+//! Rust layouts are raised to the platform's fundamental allocation quantum
+//! before reaching jemalloc. Flag selection omits redundant alignment bits so
+//! ordinary sized deallocations remain eligible for jemalloc's thread-cache
+//! fast path.
+
 use super::{
 	Layout, assert_unchecked, cmp, ffi,
 	ffi::MALLOCX_ALIGN,
 	libc::{c_int, c_void},
 };
 
-/// This constant equals _Alignof(max_align_t) and is platform-specific. It
-/// contains the _maximum_ alignment that the memory allocations returned by the
-/// C standard library memory allocation APIs (e.g. `malloc`) are guaranteed to
-/// have.
+/// Gives the platform's fundamental allocation alignment.
 ///
-/// The memory allocation APIs are required to return memory that can fit any
-/// object whose fundamental aligment is <= _Alignof(max_align_t).
-///
-/// In C, there are no ZSTs, and the size of all types is a multiple of their
-/// alignment (size >= align). So for allocations with size <=
-/// _Alignof(max_align_t), the malloc-APIs return memory whose alignment is
-/// either the requested size if its a power-of-two, or the next smaller
-/// power-of-two.
+/// This matches C's `_Alignof(max_align_t)` and is the minimum alignment that
+/// the standard allocation functions guarantee for a sufficiently large
+/// request. Layout normalization raises both size and alignment to this value.
 pub const QUANTUM: usize = QUANTUM_VALUE;
 
+/// Uses an eight-byte quantum on supported 32-bit targets.
+///
+/// These targets define `_Alignof(max_align_t)` as eight bytes for the
+/// configurations supported by this crate.
 #[cfg(any(
 	target_arch = "arm",
 	target_arch = "mips",
@@ -32,6 +35,10 @@ pub const QUANTUM: usize = QUANTUM_VALUE;
 ))]
 const QUANTUM_VALUE: usize = 8;
 
+/// Uses a sixteen-byte quantum on the listed supported targets.
+///
+/// These targets define `_Alignof(max_align_t)` as sixteen bytes for the
+/// configurations supported by this crate.
 #[cfg(any(
 	target_arch = "x86",
 	target_arch = "x86_64",
@@ -45,15 +52,21 @@ const QUANTUM_VALUE: usize = 8;
 ))]
 const QUANTUM_VALUE: usize = 16;
 
-/// Adjust the layout's size and alignment based on platform requirements prior
-/// to calls into jemalloc.
+/// Raises a nonzero layout to the platform's fundamental allocation quantum.
+///
+/// Both dimensions become at least [`QUANTUM`], while any larger requested
+/// alignment is preserved. The result is not rounded to a jemalloc size class.
+///
+/// # Panics
+///
+/// In debug builds, this function panics when the adjusted size is smaller
+/// than the adjusted alignment or an internal layout invariant is violated.
 ///
 /// # Safety
 ///
-/// This function only makes certain limited and efficient adjustments to the
-/// input layout. It is not a general sanitizer. The input layout must still
-/// construct a valid `Layout` which would not `Result` in `Err`, as the
-/// construction here is unchecked.
+/// The input size must be nonzero. The caller must also ensure that raising the
+/// size and alignment to [`QUANTUM`] still produces a valid [`Layout`], because
+/// construction of the returned value is unchecked.
 #[inline]
 #[must_use]
 pub unsafe fn adjust_layout(layout: Layout) -> Layout {
@@ -72,15 +85,12 @@ pub unsafe fn adjust_layout(layout: Layout) -> Layout {
 	}
 }
 
-/// Compute the flag word for the jemalloc calls parameterized by a layout.
+/// Computes the jemalloc flag word required by a layout.
 ///
-/// jemalloc tests this word before it inspects the pointer, taking its
-/// thread-cache fast path only when the word is zero. The alignment is
-/// therefore left unexpressed whenever the size class already satisfies it,
-/// which is the case at or below [`QUANTUM`] because every class that large is
-/// quantum-aligned. The size conjunct matters only for a raw layout whose
-/// alignment exceeds its size, where a sub-quantum class would under-align;
-/// [`adjust_layout`] output satisfies it trivially.
+/// A zero word lets sized deallocation use jemalloc's thread-cache fast path
+/// when the size class already implies the requested alignment. An explicit
+/// `MALLOCX_ALIGN` value is retained for over-aligned layouts and for raw
+/// layouts whose alignment exceeds their size.
 #[inline]
 #[must_use]
 pub fn layout_flags(layout: Layout) -> c_int {
@@ -89,19 +99,16 @@ pub fn layout_flags(layout: Layout) -> c_int {
 	if implied { 0 } else { MALLOCX_ALIGN(layout.align()) }
 }
 
-/// Return the usable size of the allocation pointed to by ptr.
+/// Returns the usable size associated with an allocation pointer.
 ///
-/// The return value may be larger than the size that was requested during
-/// allocation. This function is not a mechanism for in-place `realloc()`;
-/// rather it is provided solely as a tool for introspection purposes.
-/// Any discrepancy between the requested allocation size
-/// and the size reported by this function should not be depended on,
-/// since such behavior is entirely implementation-dependent.
+/// The reported size can exceed the original request and is intended only for
+/// introspection, not as a stable size-class guarantee. A null pointer returns
+/// zero, matching jemalloc's `malloc_usable_size` contract.
 ///
 /// # Safety
 ///
-/// `ptr` must have been allocated by `Jemalloc` and must not have been freed
-/// yet.
+/// A non-null `ptr` must identify a live allocation owned by the jemalloc
+/// instance linked into this process.
 #[inline]
 pub unsafe fn usable_size<T>(ptr: *const T) -> usize {
 	unsafe { ffi::malloc_usable_size(ptr.cast::<c_void>()) }

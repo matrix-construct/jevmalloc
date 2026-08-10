@@ -1,11 +1,17 @@
-//! Error type
+//! Error reporting for jemalloc control operations.
+//!
+//! The control API returns integer status codes. Each nonzero status is
+//! preserved as an [`Error`] with descriptions for the codes documented by
+//! jemalloc.
 
 use libc::c_int;
 
 use super::Result;
 use crate::std::{error, fmt, num};
 
+/// Selects a nonzero unsigned representation with the width of a C integer.
 pub(super) trait NonZeroT {
+	/// The corresponding nonzero unsigned integer type.
 	type T;
 }
 impl NonZeroT for i32 {
@@ -15,16 +21,20 @@ impl NonZeroT for i64 {
 	type T = num::NonZeroU64;
 }
 
+/// Nonzero storage for an error code returned as [`c_int`].
 pub(super) type NonZeroCInt = <c_int as NonZeroT>::T;
 
-/// Errors of the `jevmalloc_sys::mallctl`-family of functions.
+/// A nonzero status returned by a jemalloc control function.
 ///
-/// The `jevmalloc-sys` crate's `mallctl`, `mallctlnametomib`, and
-/// `mallctlbymib` functions return `0` on success; otherwise they return an
-/// error value.
+/// The `mallctl`, `mallctlnametomib`, and `mallctlbymib` functions return zero
+/// on success. This type retains any other return value and formats the known
+/// jemalloc error codes with a descriptive message.
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub struct Error(NonZeroCInt);
+pub struct Error(
+	/// The nonzero error code returned by jemalloc.
+	NonZeroCInt,
+);
 
 impl fmt::Debug for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -44,6 +54,7 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
+/// Returns jemalloc's description for a recognized error code.
 fn description(code: c_int) -> Option<&'static str> {
 	match code {
 		| libc::EINVAL => Some(
@@ -63,6 +74,11 @@ fn description(code: c_int) -> Option<&'static str> {
 	}
 }
 
+/// Converts a jemalloc status code into a control result.
+///
+/// # Errors
+///
+/// Returns [`Error`] when `ret` is nonzero.
 pub(crate) fn cvt(ret: c_int) -> Result<()> {
 	match ret {
 		| 0 => Ok(()),
@@ -72,8 +88,11 @@ pub(crate) fn cvt(ret: c_int) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+	//! Checks the compact representation of control errors.
+
 	use super::*;
 
+	/// Confirms that the nonzero code preserves `Result` niche optimization.
 	#[test]
 	fn size_of_result_error() {
 		use core::mem::size_of;
