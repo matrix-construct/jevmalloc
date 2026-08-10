@@ -14,6 +14,53 @@
 //! The feature set and the `JEMALLOC_SYS_WITH_*` environment variables select
 //! the configure flags; `JEMALLOC_OVERRIDE` skips the build entirely and links
 //! a library supplied by the caller instead.
+//!
+//! # Rebuild triggers
+//!
+//! A `jemalloc(build)` entry means Cargo ran this script without a
+//! `JEMALLOC_OVERRIDE`. Every such run rebuilds the bundled library from
+//! scratch: the script removes `OUT_DIR/build`, recopies the source, then runs
+//! configure and make.
+//!
+//! Cargo reruns the script after any of these changes:
+//!
+//! - The watched `jemalloc/` or `configure/` trees change. Android builds also
+//!   watch `src/pthread_atfork.c`. Cargo scans watched directories recursively
+//!   and compares filesystem modification times.
+//! - `JEMALLOC_OVERRIDE` or any configure environment variable read below
+//!   changes. The configure variables are `JEMALLOC_SYS_WITH_MALLOC_CONF`,
+//!   `JEMALLOC_SYS_WITH_LG_PAGE`, `JEMALLOC_SYS_WITH_LG_HUGEPAGE`,
+//!   `JEMALLOC_SYS_WITH_LG_QUANTUM`, and `JEMALLOC_SYS_WITH_LG_VADDR`. Each one
+//!   has a target-prefixed form, such as
+//!   `X86_64_UNKNOWN_LINUX_GNU_JEMALLOC_SYS_WITH_LG_PAGE`, which takes
+//!   precedence. The unprefixed form is watched only when the prefixed form is
+//!   absent.
+//! - A C compiler selection or flag environment variable probed by `cc`
+//!   changes. The common set is `CC`, `CFLAGS`, their target-specific forms,
+//!   `HOST_CC` or `TARGET_CC`, `HOST_CFLAGS` or `TARGET_CFLAGS`, and
+//!   `CC_ENABLE_DEBUG_OUTPUT`. Depending on the value and target, `cc` also
+//!   watches variables such as `CC_KNOWN_WRAPPER_CUSTOM`,
+//!   `CC_SHELL_ESCAPED_FLAGS`, `CROSS_COMPILE`, platform SDK variables, and the
+//!   Android shim's archiver and ranlib variables. The emitted build-script
+//!   output is the authoritative target-specific list.
+//! - Cargo recompiles or selects a new build-script unit. This includes a first
+//!   build or missing build cache, changes to `build.rs`, the included
+//!   `src/env.rs`, or a build dependency, and relevant changes to the package
+//!   version, target or host, resolved feature set, build profile, Rust flags,
+//!   Cargo configuration, or Rust toolchain.
+//!
+//! `JEMALLOC_OVERRIDE` returns before the bundled-source and compiler watches
+//! are emitted, so only override-related and Cargo-unit changes apply while it
+//! is set. `JEMALLOC_SYS_RUN_JEMALLOC_TESTS` is deliberately not watched;
+//! changing it alone does not rerun this script. Neither do changes to
+//! `NUM_JOBS`, `PATH`, the selected compiler executable at the same path, or
+//! the `sh` and make executables. Those values take effect on the next rebuild
+//! caused by another trigger.
+//!
+//! The presence of these explicit watches disables Cargo's default
+//! whole-package scan. For an unexpected rebuild, run Cargo with
+//! `CARGO_LOG=cargo::core::compiler::fingerprint=info`; the dirty fingerprint
+//! identifies which watched input or Cargo unit changed.
 
 use std::{
 	env,
@@ -159,6 +206,7 @@ fn main() {
 	assert!(out_dir.exists(), "OUT_DIR does not exist");
 	let jemalloc_repo_dir = PathBuf::from("jemalloc");
 	info!("JEMALLOC_REPO_DIR={:?}", jemalloc_repo_dir);
+	println!("cargo:rerun-if-changed=configure");
 
 	if build_dir.exists() {
 		fs::remove_dir_all(build_dir.clone()).unwrap();
