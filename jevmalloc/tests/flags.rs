@@ -34,6 +34,31 @@ const SIZES: [usize; 10] = [1, 8, 16, 17, 64, 100, 512, 4096, 65536, 1 << 20];
 /// Power-of-two alignments spanning both sides of [`QUANTUM`].
 const ALIGNS: [usize; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
 
+/// Spans fragment sizes below every explicit alignment in the focused matrix.
+///
+/// Each value remains below [`QUANTUM`], so normalization raises its size while
+/// preserving the requested larger alignment.
+const FRAGMENT_SIZES: [usize; 3] = [1, 7, 15];
+
+/// Spans explicit alignments on both sides of a typical page boundary.
+///
+/// The largest case also exceeds jemalloc's default thread-cache ceiling, so
+/// the round trip covers both slab and extent-backed allocations.
+const FRAGMENT_ALIGNS: [usize; 5] = [32, 64, 128, 4096, 65536];
+
+/// Gives the largest size a valid layout can carry at [`QUANTUM`].
+///
+/// Rounding this request to [`QUANTUM`] stays within `isize::MAX`. jemalloc
+/// rejects the resulting size as unrepresentable.
+const MAX_LAYOUT_SIZE: usize = isize::MAX.unsigned_abs() - (QUANTUM - 1);
+
+/// Gives a representable size that exceeds supported user address spaces.
+///
+/// jemalloc can compute its size class without being able to obtain a mapping,
+/// which exercises the allocation-failure path after `nallocx` succeeds.
+#[cfg(target_pointer_width = "64")]
+const UNMAPPABLE: usize = 1 << 61;
+
 /// Confirms that only alignments above the quantum retain alignment flags.
 ///
 /// After [`adjust_layout`], every supported layout at or below [`QUANTUM`] is
@@ -49,13 +74,11 @@ fn flag_word_follows_the_quantum() {
 	});
 }
 
-/// Visits each supported size and alignment pair with its computed flag word.
+/// Visits each size and alignment pair with its computed flag word.
 ///
-/// `adjust_layout` asserts that the adjusted size is at least the adjusted
-/// alignment, so a case is in the supported domain when the alignment is
-/// within the quantum or the size already covers it; every layout Rust derives
-/// from a type qualifies, since a type's size is a multiple of its alignment.
-/// The walk fails the test if it did not visit both branches.
+/// Every declared pair is a valid Rust layout, including requests whose
+/// alignment exceeds their size. The walk fails the test if it did not visit
+/// both flag branches.
 ///
 /// # Panics
 ///
@@ -71,7 +94,6 @@ fn for_each_case(mut case: impl FnMut(Layout, c_int)) {
 				.copied()
 				.map(move |align| (size, align))
 		})
-		.filter(|&(size, align)| align <= QUANTUM || size >= align)
 		.map(|(size, align)| {
 			let layout = Layout::from_size_align(size, align).unwrap();
 			let flags = layout_flags(unsafe { adjust_layout(layout) });
@@ -85,6 +107,35 @@ fn for_each_case(mut case: impl FnMut(Layout, c_int)) {
 
 	assert!(fast > 0, "no case reached the fast path");
 	assert!(aligned > 0, "no case carried an alignment");
+}
+
+/// Confirms that fragment layouts retain an explicit alignment flag.
+///
+/// The size class cannot imply an alignment larger than its requested size, so
+/// each adjusted layout must carry the corresponding `MALLOCX_ALIGN` value.
+#[test]
+fn fragment_layouts_retain_alignment_flags() {
+	for_each_fragment(|layout| {
+		let adjusted = unsafe { adjust_layout(layout) };
+
+		assert_eq!(layout_flags(adjusted), MALLOCX_ALIGN(layout.align()));
+	});
+}
+
+/// Visits every focused fragment layout.
+///
+/// Each declared pair is valid even though its requested alignment exceeds its
+/// size.
+///
+/// # Panics
+///
+/// Panics if a declared pair cannot form a layout.
+fn for_each_fragment(mut case: impl FnMut(Layout)) {
+	for size in FRAGMENT_SIZES {
+		for align in FRAGMENT_ALIGNS {
+			case(Layout::from_size_align(size, align).unwrap());
+		}
+	}
 }
 
 /// Confirms that allocations remain aligned on both flag branches.
@@ -104,6 +155,34 @@ fn allocations_are_aligned_on_both_branches() {
 
 		ptr.write_bytes(0xA5, layout.size());
 		Jemalloc.dealloc(ptr, layout);
+	});
+}
+
+/// Confirms that fragments remain aligned, resizable, and freeable.
+///
+/// The matrix crosses the page boundary and writes every requested byte before
+/// and after growing each allocation.
+#[test]
+fn fragment_allocations_round_trip() {
+	for_each_fragment(|layout| unsafe {
+		let ptr = Jemalloc.alloc(layout);
+
+		assert!(!ptr.is_null(), "{layout:?} failed to allocate");
+		assert!(ptr.addr().is_multiple_of(layout.align()), "{layout:?} came back underaligned");
+
+		ptr.write_bytes(0xA5, layout.size());
+
+		let size = layout.size() + 1;
+		let grown = Jemalloc.realloc(ptr, layout, size);
+
+		assert!(!grown.is_null(), "{layout:?} failed to grow");
+		assert!(grown.addr().is_multiple_of(layout.align()), "{layout:?} grew underaligned");
+
+		grown.write_bytes(0x5A, size);
+
+		let layout = Layout::from_size_align(size, layout.align()).unwrap();
+
+		Jemalloc.dealloc(grown, layout);
 	});
 }
 
@@ -132,12 +211,12 @@ fn zeroed_allocations_are_aligned_and_zero_on_both_branches() {
 
 /// Confirms that growing and shrinking preserve alignment on both flag paths.
 ///
-/// The branch is determined by alignment, which `realloc` preserves. Shrinks
-/// are floored at that alignment to remain in [`adjust_layout`]'s domain.
+/// The branch is determined by alignment, which `realloc` preserves. Shrinking
+/// below that alignment exercises the fragment-layout path.
 #[test]
 fn reallocations_are_aligned_on_both_branches() {
 	for_each_case(|layout, flags| unsafe {
-		for size in [layout.size() * 2, (layout.size() / 2 + 1).max(layout.align())] {
+		for size in [layout.size() * 2, layout.size() / 2 + 1] {
 			let after = Layout::from_size_align(size, layout.align()).unwrap();
 			let ptr = Jemalloc.alloc(layout);
 			let ptr = Jemalloc.realloc(ptr, layout, size);
@@ -152,6 +231,68 @@ fn reallocations_are_aligned_on_both_branches() {
 			Jemalloc.dealloc(ptr, after);
 		}
 	});
+}
+
+/// Confirms that unrepresentable requests return jemalloc's failure signal.
+///
+/// The adjusted request is a valid Rust layout for which `nallocx` returns
+/// zero. All allocating entry points must return null without inspecting it.
+#[test]
+fn unrepresentable_requests_return_null() {
+	let layout = Layout::from_size_align(MAX_LAYOUT_SIZE, QUANTUM).unwrap();
+	let adjusted = unsafe { adjust_layout(layout) };
+	let flags = layout_flags(adjusted);
+
+	assert_eq!(unsafe { nallocx(adjusted.size(), flags) }, 0);
+	assert_failure_returns_null(MAX_LAYOUT_SIZE);
+}
+
+/// Exercises every allocating entry point with a request that must fail.
+///
+/// A failed reallocation must leave its original allocation live, writable,
+/// and owned by the caller.
+///
+/// # Panics
+///
+/// Panics if an allocation unexpectedly succeeds or the original allocation
+/// does not survive a failed reallocation.
+fn assert_failure_returns_null(size: usize) {
+	let failed = Layout::from_size_align(size, QUANTUM).unwrap();
+	let original = Layout::from_size_align(QUANTUM, QUANTUM).unwrap();
+
+	unsafe {
+		assert!(Jemalloc.alloc(failed).is_null(), "alloc({size}) unexpectedly succeeded");
+		assert!(
+			Jemalloc.alloc_zeroed(failed).is_null(),
+			"alloc_zeroed({size}) unexpectedly succeeded"
+		);
+
+		let ptr = Jemalloc.alloc(original);
+
+		assert!(!ptr.is_null(), "setup allocation failed");
+		ptr.write(0xA5);
+
+		let grown = Jemalloc.realloc(ptr, original, size);
+
+		assert!(grown.is_null(), "realloc({size}) unexpectedly succeeded");
+		assert_eq!(ptr.read(), 0xA5, "failed realloc changed the original allocation");
+		Jemalloc.dealloc(ptr, original);
+	}
+}
+
+/// Confirms that unmappable requests return jemalloc's failure signal.
+///
+/// `nallocx` accepts the request, but no mapping can satisfy it. All allocating
+/// entry points must return null without inspecting it.
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn unmappable_requests_return_null() {
+	let layout = Layout::from_size_align(UNMAPPABLE, QUANTUM).unwrap();
+	let adjusted = unsafe { adjust_layout(layout) };
+	let flags = layout_flags(adjusted);
+
+	assert_ne!(unsafe { nallocx(adjusted.size(), flags) }, 0);
+	assert_failure_returns_null(UNMAPPABLE);
 }
 
 /// Confirms that dropping quantum alignment preserves the selected size class.

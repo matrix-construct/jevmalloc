@@ -57,11 +57,6 @@ const QUANTUM_VALUE: usize = 16;
 /// Both dimensions become at least [`QUANTUM`], while any larger requested
 /// alignment is preserved. The result is not rounded to a jemalloc size class.
 ///
-/// # Panics
-///
-/// In debug builds, this function panics when the adjusted size is smaller
-/// than the adjusted alignment or an internal layout invariant is violated.
-///
 /// # Safety
 ///
 /// The input size must be nonzero. The caller must also ensure that raising the
@@ -79,7 +74,6 @@ pub unsafe fn adjust_layout(layout: Layout) -> Layout {
 		assert_unchecked(layout.size() > 0);
 		let size = cmp::max(layout.size(), QUANTUM);
 		debug_assert!(size >= size_of::<c_void>(), "size too small");
-		debug_assert!(size >= align, "allocating a fragment");
 
 		Layout::from_size_align_unchecked(size, align)
 	}

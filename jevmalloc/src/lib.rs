@@ -30,7 +30,7 @@ mod global_alloc;
 mod layout;
 
 use ::core as std;
-use ::libc::{self, c_void, uintptr_t};
+use ::libc::{self, c_void};
 
 use self::std::{
 	alloc::{GlobalAlloc, Layout},

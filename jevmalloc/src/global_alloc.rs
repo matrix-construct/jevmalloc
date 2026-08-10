@@ -20,7 +20,7 @@ use super::{
 	GlobalAlloc, Jemalloc, Layout, assert_unchecked, c_void, ffi,
 	ffi::MALLOCX_ZERO,
 	layout::{adjust_layout, layout_flags},
-	uintptr_t,
+	libc::c_int,
 };
 
 /// Routes Rust's global allocation operations through jemalloc.
@@ -32,8 +32,9 @@ unsafe impl GlobalAlloc for Jemalloc {
 	/// Allocates a block suitable for `layout`.
 	///
 	/// The allocation hook observes the original layout before normalization.
-	/// jemalloc uses a null pointer to report failure; debug validation in this
-	/// implementation assumes the allocation succeeded.
+	/// jemalloc uses a null pointer to report failure, which is the failure
+	/// return this method's contract requires, and is passed through
+	/// unexamined.
 	///
 	/// # Safety
 	///
@@ -48,21 +49,9 @@ unsafe impl GlobalAlloc for Jemalloc {
 
 			let layout = adjust_layout(layout);
 			let flags = layout_flags(layout);
-			debug_assert!(
-				ffi::nallocx(layout.size(), flags) >= layout.size(),
-				"alloc: nallocx() reported failure"
-			);
-
 			let ptr = ffi::mallocx(layout.size(), flags);
-			debug_assert!(
-				(ptr as uintptr_t).is_multiple_of(layout.align()),
-				"alloc: alignment mismatch"
-			);
 
-			debug_assert!(
-				ffi::sallocx(ptr, flags) >= layout.size(),
-				"alloc: sallocx() size mismatch"
-			);
+			debug_validate(ptr, layout, flags);
 
 			ptr.cast::<u8>()
 		}
@@ -71,8 +60,9 @@ unsafe impl GlobalAlloc for Jemalloc {
 	/// Allocates a zero-initialized block suitable for `layout`.
 	///
 	/// The allocation hook observes the original layout before normalization.
-	/// jemalloc uses a null pointer to report failure; debug validation in this
-	/// implementation assumes the allocation succeeded.
+	/// jemalloc uses a null pointer to report failure, which is the failure
+	/// return this method's contract requires, and is passed through
+	/// unexamined.
 	///
 	/// # Safety
 	///
@@ -87,21 +77,9 @@ unsafe impl GlobalAlloc for Jemalloc {
 
 			let layout = adjust_layout(layout);
 			let flags = layout_flags(layout) | MALLOCX_ZERO;
-			debug_assert!(
-				ffi::nallocx(layout.size(), flags) >= layout.size(),
-				"alloc_zeroed: nallocx() reported failure"
-			);
-
 			let ptr = ffi::mallocx(layout.size(), flags);
-			debug_assert!(
-				(ptr as uintptr_t).is_multiple_of(layout.align()),
-				"alloc_zeroed: alignment mismatch"
-			);
 
-			debug_assert!(
-				ffi::sallocx(ptr, flags) >= layout.size(),
-				"alloc_zeroed: sallocx() size mismatch"
-			);
+			debug_validate(ptr, layout, flags);
 
 			ptr.cast::<u8>()
 		}
@@ -110,9 +88,8 @@ unsafe impl GlobalAlloc for Jemalloc {
 	/// Resizes an existing allocation to `new_size` bytes.
 	///
 	/// The reallocation hook receives the original layout, pointer, and
-	/// requested size before normalization. Raw `rallocx` failure leaves the
-	/// original allocation live, but debug validation in this implementation
-	/// assumes the reallocation succeeded.
+	/// requested size before normalization. A null return leaves the original
+	/// allocation live and owned by the caller, as the contract requires.
 	///
 	/// # Safety
 	///
@@ -130,21 +107,9 @@ unsafe impl GlobalAlloc for Jemalloc {
 			let layout = Layout::from_size_align_unchecked(new_size, layout.align());
 			let layout = adjust_layout(layout);
 			let flags = layout_flags(layout);
-			debug_assert!(
-				ffi::nallocx(layout.size(), flags) >= layout.size(),
-				"realloc: nallocx() reported failure"
-			);
-
 			let ptr = ffi::rallocx(ptr.cast::<c_void>(), layout.size(), flags);
-			debug_assert!(
-				(ptr as uintptr_t).is_multiple_of(layout.align()),
-				"realloc: alignment mismatch"
-			);
 
-			debug_assert!(
-				ffi::sallocx(ptr, flags) >= layout.size(),
-				"realloc: sallocx() size mismatch"
-			);
+			debug_validate(ptr, layout, flags);
 
 			ptr.cast::<u8>()
 		}
@@ -171,18 +136,37 @@ unsafe impl GlobalAlloc for Jemalloc {
 			assert_unchecked(!ptr.is_null());
 			let ptr = ptr.cast::<c_void>();
 			let layout = adjust_layout(layout);
-			debug_assert!(
-				(ptr as uintptr_t).is_multiple_of(layout.align()),
-				"dealloc: alignment mismatch"
-			);
-
 			let flags = layout_flags(layout);
-			debug_assert!(
-				ffi::sallocx(ptr, flags) >= layout.size(),
-				"dealloc: sallocx() size mismatch"
-			);
 
+			debug_validate(ptr, layout, flags);
 			ffi::sdallocx(ptr, layout.size(), flags);
 		}
+	}
+}
+
+/// Validates a served allocation against the request that produced it.
+///
+/// A null pointer is jemalloc's failure signal rather than an allocation, so
+/// the helper returns without inspecting it. `sallocx` requires a live non-null
+/// pointer, and a release jemalloc reads its radix tree for every supplied key.
+///
+/// # Safety
+///
+/// A non-null `ptr` must identify a live allocation obtained with `flags`.
+#[inline]
+#[track_caller]
+unsafe fn debug_validate(ptr: *const c_void, layout: Layout, flags: c_int) {
+	if ptr.is_null() {
+		return;
+	}
+
+	unsafe {
+		debug_assert!(
+			ffi::nallocx(layout.size(), flags) >= layout.size(),
+			"nallocx() rejected a request jemalloc served"
+		);
+
+		debug_assert!(ptr.addr().is_multiple_of(layout.align()), "alignment mismatch");
+		debug_assert!(ffi::sallocx(ptr, flags) >= layout.size(), "sallocx() size mismatch");
 	}
 }
