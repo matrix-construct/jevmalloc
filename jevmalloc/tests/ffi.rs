@@ -6,6 +6,7 @@
 #![cfg(test)]
 
 use core::ptr;
+use std::sync::Mutex;
 
 use jevmalloc::{Jemalloc, ffi};
 use libc::{c_char, c_void};
@@ -13,6 +14,9 @@ use libc::{c_char, c_void};
 /// Keeps Rust allocations and the raw FFI calls on the same allocator.
 #[global_allocator]
 static A: Jemalloc = Jemalloc;
+
+/// Serializes operations that refresh and compare cached allocator statistics.
+static STATS: Mutex<()> = Mutex::new(());
 
 /// Checks allocation, resizing, size queries, and sized deallocation.
 #[test]
@@ -37,6 +41,7 @@ fn test_basic_alloc() {
 /// Checks that named and MIB reads report the same allocated byte count.
 #[test]
 fn test_mallctl() {
+	let _guard = STATS.lock().unwrap();
 	let ptr = unsafe { ffi::mallocx(100, 0) };
 
 	let mut allocated: usize = 0;
@@ -96,6 +101,7 @@ fn test_stats() {
 		print_ctx.called_times += 1;
 	}
 
+	let _guard = STATS.lock().unwrap();
 	let mut ctx = PrintCtx { called_times: 0 };
 	unsafe {
 		ffi::malloc_stats_print(Some(write_cb), (&raw mut ctx).cast::<c_void>(), ptr::null());
