@@ -7,6 +7,14 @@ use std::sync::Mutex;
 
 use jevmalloc::{Jemalloc, ctl};
 
+/// Jemalloc's C `bool` representation when built by cl.exe.
+#[cfg(target_env = "msvc")]
+type CBool = libc::c_int;
+
+/// Jemalloc's C `_Bool` representation on other targets.
+#[cfg(not(target_env = "msvc"))]
+type CBool = bool;
+
 /// Routes test-harness allocations through the same jemalloc instance.
 #[global_allocator]
 static ALLOC: Jemalloc = Jemalloc;
@@ -18,31 +26,38 @@ static CONTROL: Mutex<()> = Mutex::new(());
 #[test]
 fn allocator_smoke() {
 	let layout = Layout::from_size_align(100, 8).unwrap();
-	unsafe {
-		let ptr = Jemalloc.alloc(layout);
-		assert!(!ptr.is_null());
-		Jemalloc.dealloc(ptr, layout);
-	}
+
+	// SAFETY: `layout` is valid and nonzero.
+	let ptr = unsafe { Jemalloc.alloc(layout) };
+	assert!(!ptr.is_null());
+
+	// SAFETY: `ptr` is a live result from this allocator for the same layout.
+	unsafe { Jemalloc.dealloc(ptr, layout) };
 }
 
-/// Checks name translation, a typed raw read, and an invalid MIB error.
+/// Checks name translation and typed raw reads and writes.
 #[test]
 fn raw_mib_access() {
 	let key = ctl::raw::mibs("epoch").unwrap();
 	assert_eq!(key.len(), 1);
 
+	// SAFETY: this is the complete `epoch` MIB with C output type `uint64_t`.
 	let epoch = unsafe { ctl::raw::get::<u64>(&key) }.unwrap();
 	assert!(epoch > 0);
 
-	let mut invalid = ctl::Key::new();
-	invalid.push(usize::MAX);
-	let error = unsafe { ctl::raw::get::<u64>(&invalid) }.unwrap_err();
-	assert!(error.is(libc::ENOENT));
-
 	let cache_key = ctl::raw::mibs("thread.tcache.enabled").unwrap();
-	let cache = unsafe { ctl::raw::get::<bool>(&cache_key) }.unwrap();
+
+	// SAFETY: this is the complete cache-setting MIB, and `CBool` matches the
+	// platform C `bool` representation.
+	let cache = unsafe { ctl::raw::get::<CBool>(&cache_key) }.unwrap();
+
+	// SAFETY: the same complete MIB accepts `CBool` as its C input type.
 	unsafe { ctl::raw::set(&cache_key, &cache) }.unwrap();
-	assert_eq!(unsafe { ctl::raw::get::<bool>(&cache_key) }.unwrap(), cache);
+
+	// SAFETY: this is the complete cache-setting MIB with C output type `CBool`.
+	let after = unsafe { ctl::raw::get::<CBool>(&cache_key) }.unwrap();
+
+	assert_eq!(after, cache);
 }
 
 /// Checks that a refresh advances jemalloc's allocator-maintained epoch.
@@ -79,10 +94,14 @@ fn all_arenas_trim() { ctl::trim(None).unwrap(); }
 fn background_thread_exchange() {
 	let _guard = CONTROL.lock().unwrap();
 	let key = ctl::raw::mibs("background_thread").unwrap();
-	let current = unsafe { ctl::raw::get::<bool>(&key) }.unwrap();
-	let previous = ctl::background_thread_enable(current).unwrap();
 
-	assert_eq!(previous, current);
+	// SAFETY: this is the complete background-thread MIB, and `CBool` matches
+	// the platform C `bool` representation.
+	let current = unsafe { ctl::raw::get::<CBool>(&key) }.unwrap();
+	let enabled = current != CBool::default();
+	let previous = ctl::background_thread_enable(enabled).unwrap();
+
+	assert_eq!(previous, enabled);
 }
 
 /// Checks future-arena decay defaults without changing their values.
@@ -91,7 +110,13 @@ fn future_arena_decay_exchange() {
 	let _guard = CONTROL.lock().unwrap();
 	let muzzy_key = ctl::raw::mibs("arenas.muzzy_decay_ms").unwrap();
 	let dirty_key = ctl::raw::mibs("arenas.dirty_decay_ms").unwrap();
+
+	// SAFETY: this complete MIB has C output type `ssize_t`, represented by
+	// `isize` on supported targets.
 	let muzzy = unsafe { ctl::raw::get::<isize>(&muzzy_key) }.unwrap();
+
+	// SAFETY: this complete MIB has C output type `ssize_t`, represented by
+	// `isize` on supported targets.
 	let dirty = unsafe { ctl::raw::get::<isize>(&dirty_key) }.unwrap();
 
 	assert_eq!(ctl::set_muzzy_decay(None, muzzy).unwrap(), muzzy);

@@ -12,7 +12,8 @@ const ALL_ARENAS: usize = 4096;
 /// Reclaims unused pages from one arena or from all arenas.
 ///
 /// The operation applies time-based decay before purging all remaining unused
-/// dirty pages. Passing `None` selects all arenas.
+/// dirty pages. Passing `None` selects all arenas. Jemalloc 5.x also retains a
+/// deprecated alias that treats the current arena count as all arenas.
 ///
 /// # Errors
 ///
@@ -26,7 +27,8 @@ pub fn trim<I: Into<Option<usize>>>(arena: I) -> Result {
 /// Purges all unused dirty pages from one arena or from all arenas.
 ///
 /// Passing `None` substitutes jemalloc's all-arenas MIB value. An explicit
-/// identifier selects only that arena.
+/// identifier normally selects only that arena. Jemalloc 5.x retains a
+/// deprecated alias that treats the current arena count as all arenas.
 ///
 /// # Errors
 ///
@@ -38,7 +40,8 @@ pub fn purge<I: Into<Option<usize>>>(arena: I) -> Result {
 /// Applies decay-based purging to one arena or to all arenas.
 ///
 /// Passing `None` substitutes jemalloc's all-arenas MIB value. Jemalloc uses
-/// each selected arena's dirty and muzzy decay intervals.
+/// each selected arena's dirty and muzzy decay intervals. Jemalloc 5.x retains
+/// a deprecated alias that treats the current arena count as all arenas.
 ///
 /// # Errors
 ///
@@ -63,7 +66,10 @@ pub fn set_muzzy_decay<I: Into<Option<usize>>>(arena: I, decay_ms: isize) -> Res
 		| Some(arena) => set_by_arena(Some(arena), key::arena_muzzy_decay()?, decay_ms),
 		| None => {
 			let key = key::arenas_muzzy_decay()?;
-			// SAFETY: `arenas.muzzy_decay_ms` has C type `ssize_t` for input and output.
+
+			// SAFETY: the fixed resolver returns the complete
+			// `arenas.muzzy_decay_ms` MIB, whose input and output use `ssize_t`,
+			// represented by `isize` on supported targets.
 			unsafe { raw::xchg(&key, &decay_ms) }
 		},
 	}
@@ -85,7 +91,10 @@ pub fn set_dirty_decay<I: Into<Option<usize>>>(arena: I, decay_ms: isize) -> Res
 		| Some(arena) => set_by_arena(Some(arena), key::arena_dirty_decay()?, decay_ms),
 		| None => {
 			let key = key::arenas_dirty_decay()?;
-			// SAFETY: `arenas.dirty_decay_ms` has C type `ssize_t` for input and output.
+
+			// SAFETY: the fixed resolver returns the complete
+			// `arenas.dirty_decay_ms` MIB, whose input and output use `ssize_t`,
+			// represented by `isize` on supported targets.
 			unsafe { raw::xchg(&key, &decay_ms) }
 		},
 	}
@@ -103,7 +112,9 @@ pub fn set_dirty_decay<I: Into<Option<usize>>>(arena: I, decay_ms: isize) -> Res
 /// Rust `usize`.
 pub fn arenas() -> Result<usize> {
 	let key = key::arenas_count()?;
-	// SAFETY: `arenas.narenas` has the C output type `unsigned`.
+
+	// SAFETY: the fixed resolver returns the complete `arenas.narenas` MIB,
+	// whose C output type is `unsigned`.
 	let arenas = unsafe { raw::get::<c_uint>(&key) }?;
 	arenas
 		.try_into()
@@ -119,7 +130,9 @@ pub fn arenas() -> Result<usize> {
 /// Returns an error if jemalloc rejects the query.
 pub fn quantum() -> Result<usize> {
 	let key = key::arenas_quantum()?;
-	// SAFETY: `arenas.quantum` has the C output type `size_t`.
+
+	// SAFETY: the fixed resolver returns the complete `arenas.quantum` MIB,
+	// whose C output type is `size_t`.
 	unsafe { raw::get(&key) }
 }
 
@@ -134,12 +147,16 @@ pub fn quantum() -> Result<usize> {
 /// reports a mode outside the documented set.
 pub fn percpu_arenas() -> Result<&'static str> {
 	let key = key::percpu_arena()?;
-	// SAFETY: `opt.percpu_arena` has the C output type `const char *`.
+
+	// SAFETY: the fixed resolver returns the complete `opt.percpu_arena` MIB,
+	// whose C output type is `const char *`.
 	let ptr = unsafe { raw::get::<*const c_char>(&key) }?;
 	if ptr.is_null() {
 		return Err(Error::bad_address());
 	}
 
+	// SAFETY: the pointer names one of jemalloc's process-lifetime static,
+	// NUL-terminated mode strings.
 	let value = unsafe { CStr::from_ptr(ptr) }.to_bytes();
 	match value {
 		| b"disabled" => Ok("disabled"),
@@ -173,21 +190,30 @@ pub fn is_phycpu_arena() -> bool { percpu_arenas().is_ok_and(|mode| mode == "phy
 /// Invokes an arena command after substituting an arena identifier.
 pub(super) fn notify_by_arena(id: Option<usize>, mut key: Key) -> Result {
 	key = select_arena(id, key);
-	// SAFETY: callers supply only the documented arena purge or decay command.
+
+	// SAFETY: closed call sites supply complete purge or decay templates.
+	// Replacing their arena segment preserves the complete command, and both
+	// commands accept null value pointers and zero lengths.
 	unsafe { raw::notify(&key) }
 }
 
-/// Updates an arena control after substituting an arena identifier.
-pub(super) fn set_by_arena<T: Copy>(id: Option<usize>, mut key: Key, value: T) -> Result<T> {
+/// Updates a decay control after substituting an arena identifier.
+pub(super) fn set_by_arena(id: Option<usize>, mut key: Key, value: isize) -> Result<isize> {
 	key = select_arena(id, key);
-	// SAFETY: callers select a key whose C input and output types are both `T`.
+
+	// SAFETY: the closed call-site set supplies a complete dirty or muzzy decay
+	// MIB, whose C input and output types are `ssize_t`, represented by `isize`
+	// on supported targets.
 	unsafe { raw::xchg(&key, &value) }
 }
 
-/// Reads an arena control after substituting an arena identifier.
-pub(super) fn get_by_arena<T: Copy>(id: Option<usize>, mut key: Key) -> Result<T> {
+/// Reads a decay control after substituting an arena identifier.
+pub(super) fn get_by_arena(id: Option<usize>, mut key: Key) -> Result<isize> {
 	key = select_arena(id, key);
-	// SAFETY: callers select a key whose C output type is `T`.
+
+	// SAFETY: the closed call-site set supplies a complete dirty or muzzy decay
+	// MIB, whose C output type is `ssize_t`, represented by `isize` on supported
+	// targets.
 	unsafe { raw::get(&key) }
 }
 

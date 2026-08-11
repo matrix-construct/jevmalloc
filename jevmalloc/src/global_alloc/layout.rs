@@ -6,10 +6,10 @@
 
 //! Layout normalization and flag selection for jemalloc calls.
 //!
-//! Rust layouts are raised to the platform's fundamental allocation quantum
-//! before reaching jemalloc. Flag selection omits redundant alignment bits so
-//! ordinary sized deallocations remain eligible for jemalloc's thread-cache
-//! fast path.
+//! Requests smaller than the platform's fundamental allocation quantum are
+//! raised to it before reaching jemalloc. Flag selection omits redundant
+//! alignment bits so ordinary sized deallocations remain eligible for
+//! jemalloc's thread-cache fast path.
 
 use libc::{c_int, c_void};
 
@@ -19,7 +19,7 @@ use super::{Layout, assert_unchecked, cmp, ffi, ffi::MALLOCX_ALIGN};
 ///
 /// This matches C's `_Alignof(max_align_t)` and is the minimum alignment that
 /// the standard allocation functions guarantee for a sufficiently large
-/// request. Layout normalization raises both size and alignment to this value.
+/// request. Layout normalization raises smaller request sizes to this value.
 pub const QUANTUM: usize = QUANTUM_VALUE;
 
 /// Uses an eight-byte quantum on supported 32-bit targets.
@@ -50,31 +50,26 @@ const QUANTUM_VALUE: usize = 8;
 ))]
 const QUANTUM_VALUE: usize = 16;
 
-/// Raises a nonzero layout to the platform's fundamental allocation quantum.
+/// Raises a nonzero layout's size to the platform's allocation quantum.
 ///
-/// Both dimensions become at least [`QUANTUM`], while any larger requested
-/// alignment is preserved. The result is not rounded to a jemalloc size class.
+/// The size becomes at least [`QUANTUM`], while the requested alignment is
+/// preserved. The result is not rounded to a jemalloc size class. Preserving
+/// the alignment keeps every valid nonzero input representable as a [`Layout`].
 ///
 /// # Safety
 ///
-/// The input size must be nonzero. The caller must also ensure that raising the
-/// size and alignment to [`QUANTUM`] still produces a valid [`Layout`], because
-/// construction of the returned value is unchecked.
+/// The input size must be nonzero.
 #[inline]
 #[must_use]
 pub unsafe fn adjust_layout(layout: Layout) -> Layout {
-	unsafe {
-		assert_unchecked(layout.align() > 0);
-		let align = cmp::max(layout.align(), QUANTUM);
-		debug_assert!(align >= size_of::<c_void>(), "alignment too small");
-		debug_assert!(align.is_power_of_two(), "alignment not a pow2");
+	// SAFETY: the caller guarantees a nonzero input size.
+	unsafe { assert_unchecked(layout.size() > 0) };
+	let size = cmp::max(layout.size(), QUANTUM);
 
-		assert_unchecked(layout.size() > 0);
-		let size = cmp::max(layout.size(), QUANTUM);
-		debug_assert!(size >= size_of::<c_void>(), "size too small");
-
-		Layout::from_size_align_unchecked(size, align)
-	}
+	// SAFETY: increasing a nonzero size below `QUANTUM` preserves validity.
+	// Alignments at most `QUANTUM` divide the new size; larger alignments round
+	// both the original and adjusted sizes to the same value.
+	unsafe { Layout::from_size_align_unchecked(size, layout.align()) }
 }
 
 /// Computes the jemalloc flag word required by a layout.
@@ -95,7 +90,9 @@ pub fn layout_flags(layout: Layout) -> c_int {
 ///
 /// The reported size can exceed the original request and is intended only for
 /// introspection, not as a stable size-class guarantee. A null pointer returns
-/// zero, matching jemalloc's `malloc_usable_size` contract.
+/// zero without querying jemalloc. Non-null pointers are queried through
+/// `sallocx` so the allocator and ownership lookup cannot be split by symbol
+/// interposition.
 ///
 /// # Safety
 ///
@@ -103,5 +100,11 @@ pub fn layout_flags(layout: Layout) -> c_int {
 /// instance linked into this process.
 #[inline]
 pub unsafe fn usable_size<T>(ptr: *const T) -> usize {
-	unsafe { ffi::malloc_usable_size(ptr.cast::<c_void>()) }
+	if ptr.is_null() {
+		0
+	} else {
+		// SAFETY: the function contract guarantees a live non-null allocation
+		// owned by the linked jemalloc instance.
+		unsafe { ffi::sallocx(ptr.cast::<c_void>(), 0) }
+	}
 }

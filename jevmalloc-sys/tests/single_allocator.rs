@@ -13,7 +13,6 @@
 
 #[cfg(not(prefixed))]
 use core::ptr::null_mut;
-use std::ffi::CString;
 
 use jevmalloc_sys as ffi;
 use libc::{c_uint, c_void};
@@ -34,11 +33,12 @@ fn oracle_rejects_a_stack_address() {
 /// 5.3.1 made `arenas.lookup` safe on a foreign pointer, so ownership is an
 /// ordinary assertion.
 fn arena_of(ptr: *const c_void) -> Option<c_uint> {
-	// jemalloc has to be initialized before its ctl namespace answers.
-	unsafe { ffi::free(ffi::malloc(1)) };
-
 	let mut arena: c_uint = c_uint::MAX;
 	let mut len = size_of::<c_uint>();
+
+	// SAFETY: the name is NUL-terminated. `arena` and `len` are aligned,
+	// writable, and live; `ptr` is supplied through a readable pointer-sized
+	// input slot that also remains live.
 	let rc = unsafe {
 		ffi::mallctl(
 			c"arenas.lookup".as_ptr(),
@@ -49,19 +49,29 @@ fn arena_of(ptr: *const c_void) -> Option<c_uint> {
 		)
 	};
 
-	rc.eq(&0).then_some(arena)
+	match rc {
+		| 0 => {
+			assert_eq!(len, size_of::<c_uint>());
+			Some(arena)
+		},
+		| libc::EINVAL => None,
+		| error => panic!("arenas.lookup failed with status {error}"),
+	}
 }
 
 #[test]
 fn jemalloc_owns_what_jemalloc_allocated() {
-	unsafe {
-		let ptr = ffi::malloc(1024);
+	// SAFETY: the nonzero request has no additional alignment requirement.
+	let ptr = unsafe { ffi::malloc(1024) };
+	assert!(!ptr.is_null(), "ffi::malloc returned null");
+	let owned = arena_of(ptr).is_some();
 
-		assert_owned(ptr, "ffi::malloc");
-		ffi::free(ptr);
-	}
+	// SAFETY: `ptr` is the still-live result of `ffi::malloc`.
+	unsafe { ffi::free(ptr) };
+	assert!(owned, "ffi::malloc did not come from jemalloc");
 }
 
+#[cfg(not(prefixed))]
 fn assert_owned(ptr: *const c_void, what: &str) {
 	assert!(!ptr.is_null(), "{what} returned null");
 	assert!(arena_of(ptr).is_some(), "{what} did not come from jemalloc");
@@ -73,7 +83,7 @@ fn assert_owned(ptr: *const c_void, what: &str) {
 /// is not split.
 #[cfg(not(prefixed))]
 mod unprefixed {
-	use super::{CString, assert_owned, ffi, null_mut};
+	use super::{assert_owned, ffi, null_mut};
 
 	#[test]
 	fn libc_malloc_is_jemalloc() {
@@ -86,12 +96,14 @@ mod unprefixed {
 
 	#[test]
 	fn libc_allocates_through_jemalloc() {
-		unsafe {
-			let ptr = libc::malloc(1024);
+		// SAFETY: the nonzero request has no additional alignment requirement.
+		let ptr = unsafe { libc::malloc(1024) };
+		assert!(!ptr.is_null(), "libc::malloc returned null");
+		let owned = super::arena_of(ptr).is_some();
 
-			assert_owned(ptr, "libc::malloc");
-			libc::free(ptr);
-		}
+		// SAFETY: `ptr` is a live result from this same C allocation API.
+		unsafe { libc::free(ptr) };
+		assert!(owned, "libc::malloc did not come from jemalloc");
 	}
 
 	/// Allocations libc makes on the caller's behalf and hands back for the
@@ -102,24 +114,30 @@ mod unprefixed {
 	/// `src/env.rs`.
 	#[test]
 	fn libc_internal_allocations_come_from_jemalloc() {
-		unsafe {
-			let src = CString::new("a string for libc to duplicate").unwrap();
-			let dup = libc::strdup(src.as_ptr());
+		let src = c"a string for libc to duplicate";
 
-			assert_owned(dup.cast(), "strdup()");
-			ffi::free(dup.cast());
+		// SAFETY: `src` is NUL-terminated and remains live for the call.
+		let dup = unsafe { libc::strdup(src.as_ptr()) };
+		assert_owned(dup.cast(), "strdup()");
 
-			let cwd = libc::getcwd(null_mut(), 0);
+		// SAFETY: `assert_owned` established a live jemalloc allocation.
+		unsafe { ffi::free(dup.cast()) };
 
-			assert_owned(cwd.cast(), "getcwd(NULL, 0)");
-			ffi::free(cwd.cast());
+		// SAFETY: a null buffer with zero size requests an allocated C string.
+		let cwd = unsafe { libc::getcwd(null_mut(), 0) };
+		assert_owned(cwd.cast(), "getcwd(NULL, 0)");
 
-			let dot = CString::new(".").unwrap();
-			let real = libc::realpath(dot.as_ptr(), null_mut());
+		// SAFETY: `assert_owned` established a live jemalloc allocation.
+		unsafe { ffi::free(cwd.cast()) };
+		let dot = c".";
 
-			assert_owned(real.cast(), "realpath(.., NULL)");
-			ffi::free(real.cast());
-		}
+		// SAFETY: `dot` is NUL-terminated and live; the null output requests an
+		// allocated canonical path.
+		let real = unsafe { libc::realpath(dot.as_ptr(), null_mut()) };
+		assert_owned(real.cast(), "realpath(.., NULL)");
+
+		// SAFETY: `assert_owned` established a live jemalloc allocation.
+		unsafe { ffi::free(real.cast()) };
 	}
 }
 
@@ -129,7 +147,7 @@ mod unprefixed {
 /// between them is exactly what must not be crossed.
 #[cfg(prefixed)]
 mod prefixed {
-	use super::{CString, arena_of, ffi};
+	use super::{arena_of, ffi};
 
 	#[test]
 	fn libc_malloc_is_not_jemalloc() {
@@ -142,13 +160,15 @@ mod prefixed {
 
 	#[test]
 	fn libc_keeps_its_own_heap() {
-		unsafe {
-			let src = CString::new("a string for libc to duplicate").unwrap();
-			let dup = libc::strdup(src.as_ptr());
+		let src = c"a string for libc to duplicate";
 
-			assert!(!dup.is_null());
-			assert_eq!(arena_of(dup.cast()), None, "jemalloc claimed a libc allocation");
-			libc::free(dup.cast());
-		}
+		// SAFETY: `src` is NUL-terminated and remains live for the call.
+		let dup = unsafe { libc::strdup(src.as_ptr()) };
+		assert!(!dup.is_null());
+		let arena = arena_of(dup.cast());
+
+		// SAFETY: `dup` is the still-live result of `libc::strdup`.
+		unsafe { libc::free(dup.cast()) };
+		assert_eq!(arena, None, "jemalloc claimed a libc allocation");
 	}
 }

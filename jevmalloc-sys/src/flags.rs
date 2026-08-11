@@ -12,6 +12,7 @@ use libc::c_int;
 /// It does not validate that `la` is within the valid range.
 #[must_use]
 #[inline(always)]
+#[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub const fn MALLOCX_LG_ALIGN(la: usize) -> c_int { la as c_int }
 
 /// Align the memory allocation to start at an address that is a multiple of
@@ -20,6 +21,7 @@ pub const fn MALLOCX_LG_ALIGN(la: usize) -> c_int { la as c_int }
 /// This function does not validate that `align` is a power of two.
 #[must_use]
 #[inline(always)]
+#[expect(clippy::cast_possible_wrap)]
 pub const fn MALLOCX_ALIGN(align: usize) -> c_int { align.trailing_zeros() as c_int }
 
 /// Use the arena specified by the index `a`.
@@ -31,6 +33,7 @@ pub const fn MALLOCX_ALIGN(align: usize) -> c_int { align.trailing_zeros() as c_
 /// valid range.
 #[must_use]
 #[inline(always)]
+#[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub const fn MALLOCX_ARENA(a: usize) -> c_int { (a as c_int).wrapping_add(1).wrapping_shl(20) }
 
 /// Use the thread-specific cache (_tcache_) specified by the identifier `tc`.
@@ -39,6 +42,7 @@ pub const fn MALLOCX_ARENA(a: usize) -> c_int { (a as c_int).wrapping_add(1).wra
 /// does not validate that `tc` specifies a valid identifier.
 #[must_use]
 #[inline(always)]
+#[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub const fn MALLOCX_TCACHE(tc: usize) -> c_int { tc.wrapping_add(2).wrapping_shl(8) as c_int }
 
 /// Do not use a thread-specific cache (_tcache_).

@@ -12,13 +12,15 @@ use jevmalloc_sys as ffi;
 fn free_sized_roundtrip() {
 	const SIZE: usize = 64;
 
-	unsafe {
-		let ptr = ffi::malloc(SIZE);
+	// SAFETY: `SIZE` is nonzero and imposes no special alignment request.
+	let ptr = unsafe { ffi::malloc(SIZE) };
+	assert!(!ptr.is_null());
 
-		assert!(!ptr.is_null());
-		ptr.cast::<u8>().write_bytes(0xAB, SIZE);
-		ffi::free_sized(ptr, SIZE);
-	}
+	// SAFETY: the live allocation contains at least `SIZE` writable bytes.
+	unsafe { ptr.cast::<u8>().write_bytes(0xAB, SIZE) };
+
+	// SAFETY: `ptr` remains live and `SIZE` is the exact allocation request.
+	unsafe { ffi::free_sized(ptr, SIZE) };
 }
 
 #[test]
@@ -26,12 +28,16 @@ fn free_aligned_sized_roundtrip() {
 	const ALIGN: usize = 64;
 	const SIZE: usize = 128;
 
-	unsafe {
-		let ptr = ffi::aligned_alloc(ALIGN, SIZE);
+	// SAFETY: `ALIGN` is a power of two and `SIZE` is its nonzero multiple.
+	let ptr = unsafe { ffi::aligned_alloc(ALIGN, SIZE) };
+	assert!(!ptr.is_null());
+	let aligned = ptr.addr().is_multiple_of(ALIGN);
 
-		assert!(!ptr.is_null());
-		assert!(ptr.addr().is_multiple_of(ALIGN), "aligned_alloc under-aligned the allocation");
-		ptr.cast::<u8>().write_bytes(0xCD, SIZE);
-		ffi::free_aligned_sized(ptr, ALIGN, SIZE);
-	}
+	// SAFETY: the live allocation contains at least `SIZE` writable bytes.
+	unsafe { ptr.cast::<u8>().write_bytes(0xCD, SIZE) };
+
+	// SAFETY: `ptr` remains live, and the exact requested alignment and size
+	// accompany it.
+	unsafe { ffi::free_aligned_sized(ptr, ALIGN, SIZE) };
+	assert!(aligned, "aligned_alloc under-aligned the allocation");
 }

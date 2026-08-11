@@ -18,6 +18,7 @@ fn thread_counters_remain_distinct_and_monotonic() {
 	let deallocated_before = counters.deallocated();
 	let layout = Layout::from_size_align(4096, 64).unwrap();
 
+	// SAFETY: `layout` is valid and nonzero.
 	let ptr = unsafe { Jemalloc.alloc(layout) };
 	assert!(!ptr.is_null());
 	let allocated_after = counters.allocated();
@@ -29,6 +30,7 @@ fn thread_counters_remain_distinct_and_monotonic() {
 			<= u64::MAX / 2
 	);
 
+	// SAFETY: `ptr` is a live result from this allocator for the same layout.
 	unsafe { Jemalloc.dealloc(ptr, layout) };
 	let deallocated_after = counters.deallocated();
 	assert!(deallocated_after.wrapping_sub(deallocated_before) >= layout.size() as u64);

@@ -45,11 +45,12 @@ const FRAGMENT_SIZES: [usize; 3] = [1, 7, 15];
 /// the round trip covers both slab and extent-backed allocations.
 const FRAGMENT_ALIGNS: [usize; 5] = [32, 64, 128, 4096, 65536];
 
-/// Gives the largest size a valid layout can carry at [`QUANTUM`].
+/// Gives the largest size any valid nonzero layout can carry.
 ///
-/// Rounding this request to [`QUANTUM`] stays within `isize::MAX`. jemalloc
-/// rejects the resulting size as unrepresentable.
-const MAX_LAYOUT_SIZE: usize = isize::MAX.unsigned_abs() - (QUANTUM - 1);
+/// The alignment-one layout is valid, but raising its alignment to [`QUANTUM`]
+/// would make its rounded size exceed `isize::MAX`. jemalloc rejects the
+/// original request as unrepresentable.
+const MAX_LAYOUT_SIZE: usize = isize::MAX.unsigned_abs();
 
 /// Gives a representable size that exceeds supported user address spaces.
 ///
@@ -95,7 +96,9 @@ fn for_each_case(mut case: impl FnMut(Layout, c_int)) {
 		})
 		.map(|(size, align)| {
 			let layout = Layout::from_size_align(size, align).unwrap();
-			let flags = layout_flags(unsafe { adjust_layout(layout) });
+			// SAFETY: every matrix entry has a nonzero size.
+			let adjusted = unsafe { adjust_layout(layout) };
+			let flags = layout_flags(adjusted);
 
 			case(layout, flags);
 			flags
@@ -115,8 +118,8 @@ fn for_each_case(mut case: impl FnMut(Layout, c_int)) {
 #[test]
 fn fragment_layouts_retain_alignment_flags() {
 	for_each_fragment(|layout| {
+		// SAFETY: every fragment layout has a nonzero size.
 		let adjusted = unsafe { adjust_layout(layout) };
-
 		assert_eq!(layout_flags(adjusted), MALLOCX_ALIGN(layout.align()));
 	});
 }
@@ -143,17 +146,21 @@ fn for_each_fragment(mut case: impl FnMut(Layout)) {
 /// the selected size class.
 #[test]
 fn allocations_are_aligned_on_both_branches() {
-	for_each_case(|layout, flags| unsafe {
-		let ptr = Jemalloc.alloc(layout);
+	for_each_case(|layout, flags| {
+		// SAFETY: every matrix layout is valid and nonzero.
+		let ptr = unsafe { Jemalloc.alloc(layout) };
 
 		assert!(!ptr.is_null(), "{layout:?} flags {flags} failed to allocate");
-		assert!(
-			ptr.addr().is_multiple_of(layout.align()),
-			"{layout:?} flags {flags} came back underaligned"
-		);
+		let aligned = ptr.addr().is_multiple_of(layout.align());
 
-		ptr.write_bytes(0xA5, layout.size());
-		Jemalloc.dealloc(ptr, layout);
+		// SAFETY: the live allocation contains at least `layout.size()` writable
+		// bytes.
+		unsafe { ptr.write_bytes(0xA5, layout.size()) };
+
+		// SAFETY: `ptr` remains live and was created with this exact layout.
+		unsafe { Jemalloc.dealloc(ptr, layout) };
+
+		assert!(aligned, "{layout:?} flags {flags} came back underaligned");
 	});
 }
 
@@ -163,25 +170,38 @@ fn allocations_are_aligned_on_both_branches() {
 /// and after growing each allocation.
 #[test]
 fn fragment_allocations_round_trip() {
-	for_each_fragment(|layout| unsafe {
-		let ptr = Jemalloc.alloc(layout);
-
+	for_each_fragment(|layout| {
+		// SAFETY: every fragment layout is valid and nonzero.
+		let ptr = unsafe { Jemalloc.alloc(layout) };
 		assert!(!ptr.is_null(), "{layout:?} failed to allocate");
-		assert!(ptr.addr().is_multiple_of(layout.align()), "{layout:?} came back underaligned");
+		let allocated_aligned = ptr.addr().is_multiple_of(layout.align());
 
-		ptr.write_bytes(0xA5, layout.size());
-
+		// SAFETY: the live allocation contains at least `layout.size()` writable
+		// bytes.
+		unsafe { ptr.write_bytes(0xA5, layout.size()) };
 		let size = layout.size() + 1;
-		let grown = Jemalloc.realloc(ptr, layout, size);
 
-		assert!(!grown.is_null(), "{layout:?} failed to grow");
-		assert!(grown.addr().is_multiple_of(layout.align()), "{layout:?} grew underaligned");
+		// SAFETY: `ptr` is live from this allocator, and `size` is nonzero and
+		// valid for the original alignment.
+		let grown = unsafe { Jemalloc.realloc(ptr, layout, size) };
+		if grown.is_null() {
+			// SAFETY: failed reallocation leaves the original allocation live.
+			unsafe { Jemalloc.dealloc(ptr, layout) };
+			panic!("{layout:?} failed to grow");
+		}
 
-		grown.write_bytes(0x5A, size);
+		let grown_aligned = grown.addr().is_multiple_of(layout.align());
+
+		// SAFETY: successful reallocation returned at least `size` writable bytes.
+		unsafe { grown.write_bytes(0x5A, size) };
 
 		let layout = Layout::from_size_align(size, layout.align()).unwrap();
 
-		Jemalloc.dealloc(grown, layout);
+		// SAFETY: `grown` remains live and was created with this new layout.
+		unsafe { Jemalloc.dealloc(grown, layout) };
+
+		assert!(allocated_aligned, "{layout:?} was initially underaligned");
+		assert!(grown_aligned, "{layout:?} grew underaligned");
 	});
 }
 
@@ -192,19 +212,21 @@ fn fragment_allocations_round_trip() {
 /// regardless.
 #[test]
 fn zeroed_allocations_are_aligned_and_zero_on_both_branches() {
-	for_each_case(|layout, flags| unsafe {
-		let ptr = Jemalloc.alloc_zeroed(layout);
-
+	for_each_case(|layout, flags| {
+		// SAFETY: every matrix layout is valid and nonzero.
+		let ptr = unsafe { Jemalloc.alloc_zeroed(layout) };
 		assert!(!ptr.is_null(), "{layout:?} flags {flags} failed to allocate");
-		assert!(
-			ptr.addr().is_multiple_of(layout.align()),
-			"{layout:?} flags {flags} came back underaligned"
-		);
+		let aligned = ptr.addr().is_multiple_of(layout.align());
 
-		let bytes = slice::from_raw_parts(ptr, layout.size());
+		// SAFETY: the live allocation contains `layout.size()` initialized bytes.
+		let bytes = unsafe { slice::from_raw_parts(ptr, layout.size()) };
+		let zeroed = bytes.iter().all(|byte| *byte == 0);
 
-		assert!(bytes.iter().all(|byte| *byte == 0), "{layout:?} flags {flags} was not zeroed");
-		Jemalloc.dealloc(ptr, layout);
+		// SAFETY: `ptr` remains live and was created with this exact layout.
+		unsafe { Jemalloc.dealloc(ptr, layout) };
+
+		assert!(aligned, "{layout:?} flags {flags} came back underaligned");
+		assert!(zeroed, "{layout:?} flags {flags} was not zeroed");
 	});
 }
 
@@ -214,20 +236,33 @@ fn zeroed_allocations_are_aligned_and_zero_on_both_branches() {
 /// below that alignment exercises the fragment-layout path.
 #[test]
 fn reallocations_are_aligned_on_both_branches() {
-	for_each_case(|layout, flags| unsafe {
+	for_each_case(|layout, flags| {
 		for size in [layout.size() * 2, layout.size() / 2 + 1] {
 			let after = Layout::from_size_align(size, layout.align()).unwrap();
-			let ptr = Jemalloc.alloc(layout);
-			let ptr = Jemalloc.realloc(ptr, layout, size);
 
-			assert!(!ptr.is_null(), "{layout:?} -> {size} flags {flags} failed to reallocate");
-			assert!(
-				ptr.addr().is_multiple_of(layout.align()),
-				"{layout:?} -> {size} flags {flags} came back underaligned"
-			);
+			// SAFETY: every matrix layout is valid and nonzero.
+			let ptr = unsafe { Jemalloc.alloc(layout) };
+			assert!(!ptr.is_null(), "{layout:?} flags {flags} failed to allocate");
 
-			ptr.write_bytes(0x5A, size);
-			Jemalloc.dealloc(ptr, after);
+			// SAFETY: `ptr` is live from this allocator, and `size` is nonzero and
+			// valid for the original alignment.
+			let resized = unsafe { Jemalloc.realloc(ptr, layout, size) };
+			if resized.is_null() {
+				// SAFETY: failed reallocation leaves the original allocation live.
+				unsafe { Jemalloc.dealloc(ptr, layout) };
+				panic!("{layout:?} -> {size} flags {flags} failed to reallocate");
+			}
+
+			let aligned = resized.addr().is_multiple_of(layout.align());
+
+			// SAFETY: successful reallocation returned at least `size` writable
+			// bytes.
+			unsafe { resized.write_bytes(0x5A, size) };
+
+			// SAFETY: `resized` remains live and was created with `after`.
+			unsafe { Jemalloc.dealloc(resized, after) };
+
+			assert!(aligned, "{layout:?} -> {size} flags {flags} came back underaligned");
 		}
 	});
 }
@@ -238,12 +273,16 @@ fn reallocations_are_aligned_on_both_branches() {
 /// zero. All allocating entry points must return null without inspecting it.
 #[test]
 fn unrepresentable_requests_return_null() {
-	let layout = Layout::from_size_align(MAX_LAYOUT_SIZE, QUANTUM).unwrap();
+	let layout = Layout::from_size_align(MAX_LAYOUT_SIZE, 1).unwrap();
+
+	// SAFETY: the maximum-size layout remains nonzero.
 	let adjusted = unsafe { adjust_layout(layout) };
 	let flags = layout_flags(adjusted);
+	assert_eq!(adjusted, layout);
 
+	// SAFETY: the adjusted size is nonzero and `flags` is valid for its layout.
 	assert_eq!(unsafe { nallocx(adjusted.size(), flags) }, 0);
-	assert_failure_returns_null(MAX_LAYOUT_SIZE);
+	assert_failure_returns_null(layout);
 }
 
 /// Exercises every allocating entry point with a request that must fail.
@@ -255,28 +294,52 @@ fn unrepresentable_requests_return_null() {
 ///
 /// Panics if an allocation unexpectedly succeeds or the original allocation
 /// does not survive a failed reallocation.
-fn assert_failure_returns_null(size: usize) {
-	let failed = Layout::from_size_align(size, QUANTUM).unwrap();
-	let original = Layout::from_size_align(QUANTUM, QUANTUM).unwrap();
+fn assert_failure_returns_null(failed: Layout) {
+	let size = failed.size();
+	let original = Layout::from_size_align(QUANTUM, failed.align()).unwrap();
 
-	unsafe {
-		assert!(Jemalloc.alloc(failed).is_null(), "alloc({size}) unexpectedly succeeded");
-		assert!(
-			Jemalloc.alloc_zeroed(failed).is_null(),
-			"alloc_zeroed({size}) unexpectedly succeeded"
-		);
-
-		let ptr = Jemalloc.alloc(original);
-
-		assert!(!ptr.is_null(), "setup allocation failed");
-		ptr.write(0xA5);
-
-		let grown = Jemalloc.realloc(ptr, original, size);
-
-		assert!(grown.is_null(), "realloc({size}) unexpectedly succeeded");
-		assert_eq!(ptr.read(), 0xA5, "failed realloc changed the original allocation");
-		Jemalloc.dealloc(ptr, original);
+	// SAFETY: `failed` is valid and nonzero.
+	let allocated = unsafe { Jemalloc.alloc(failed) };
+	if !allocated.is_null() {
+		// SAFETY: the unexpected success returned a live allocation for `failed`.
+		unsafe { Jemalloc.dealloc(allocated, failed) };
 	}
+	assert!(allocated.is_null(), "alloc({size}) unexpectedly succeeded");
+
+	// SAFETY: `failed` is valid and nonzero.
+	let zeroed = unsafe { Jemalloc.alloc_zeroed(failed) };
+	if !zeroed.is_null() {
+		// SAFETY: the unexpected success returned a live allocation for `failed`.
+		unsafe { Jemalloc.dealloc(zeroed, failed) };
+	}
+	assert!(zeroed.is_null(), "alloc_zeroed({size}) unexpectedly succeeded");
+
+	// SAFETY: `original` is valid and nonzero.
+	let ptr = unsafe { Jemalloc.alloc(original) };
+	assert!(!ptr.is_null(), "setup allocation failed");
+
+	// SAFETY: `ptr` identifies at least one writable byte in a live allocation.
+	unsafe { ptr.write(0xA5) };
+
+	// SAFETY: `ptr` is live from this allocator, and `failed` has the same
+	// alignment and a valid nonzero size.
+	let grown = unsafe { Jemalloc.realloc(ptr, original, size) };
+	let preserved = if grown.is_null() {
+		// SAFETY: failed reallocation leaves the initialized original live.
+		let value = unsafe { ptr.read() };
+
+		// SAFETY: `ptr` remains live and retains its original layout.
+		unsafe { Jemalloc.dealloc(ptr, original) };
+		Some(value)
+	} else {
+		// SAFETY: successful reallocation consumed `ptr` and returned a live
+		// allocation described by `failed`.
+		unsafe { Jemalloc.dealloc(grown, failed) };
+		None
+	};
+
+	assert!(grown.is_null(), "realloc({size}) unexpectedly succeeded");
+	assert_eq!(preserved, Some(0xA5), "failed realloc changed the original allocation");
 }
 
 /// Confirms that unmappable requests return jemalloc's failure signal.
@@ -287,11 +350,14 @@ fn assert_failure_returns_null(size: usize) {
 #[test]
 fn unmappable_requests_return_null() {
 	let layout = Layout::from_size_align(UNMAPPABLE, QUANTUM).unwrap();
+
+	// SAFETY: the unmappable test layout remains nonzero.
 	let adjusted = unsafe { adjust_layout(layout) };
 	let flags = layout_flags(adjusted);
 
+	// SAFETY: the adjusted size is nonzero and `flags` is valid for its layout.
 	assert_ne!(unsafe { nallocx(adjusted.size(), flags) }, 0);
-	assert_failure_returns_null(UNMAPPABLE);
+	assert_failure_returns_null(layout);
 }
 
 /// Confirms that dropping quantum alignment preserves the selected size class.
@@ -301,8 +367,12 @@ fn unmappable_requests_return_null() {
 #[test]
 fn dropping_the_alignment_keeps_the_size_class() {
 	for size in QUANTUM..=65536 {
-		let (plain, aligned) =
-			unsafe { (nallocx(size, 0), nallocx(size, MALLOCX_ALIGN(QUANTUM))) };
+		// SAFETY: every loop size is nonzero and the zero flag word is valid.
+		let plain = unsafe { nallocx(size, 0) };
+
+		// SAFETY: every loop size is nonzero, and `QUANTUM` is a supported
+		// power-of-two alignment.
+		let aligned = unsafe { nallocx(size, MALLOCX_ALIGN(QUANTUM)) };
 
 		assert_eq!(plain, aligned, "size {size} lands in a different class without the flag");
 	}

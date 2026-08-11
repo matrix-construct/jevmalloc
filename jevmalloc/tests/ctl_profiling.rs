@@ -4,7 +4,16 @@
 
 use jevmalloc::{Jemalloc, ctl};
 
+/// Jemalloc's C `bool` representation when built by cl.exe.
+#[cfg(target_env = "msvc")]
+type CBool = libc::c_int;
+
+/// Jemalloc's C `_Bool` representation on other targets.
+#[cfg(not(target_env = "msvc"))]
+type CBool = bool;
+
 /// Permits one static byte pointer to initialize the exported C string pointer.
+#[repr(C)]
 union ConfigPtr {
 	/// Pointer to the first configuration byte.
 	byte: &'static u8,
@@ -14,12 +23,16 @@ union ConfigPtr {
 }
 
 /// Configuration shared by both possible exported symbol names.
-const CONFIG: Option<&'static libc::c_char> = Some(unsafe {
-	ConfigPtr {
-		byte: &b"prof:true,prof_active:false,prof_gdump:false\0"[0],
-	}
-	.char
-});
+const CONFIG: Option<&'static libc::c_char> = Some(
+	// SAFETY: `u8` and `c_char` have identical one-byte layouts, every bit
+	// pattern is valid, and the referenced NUL-terminated bytes are static.
+	unsafe {
+		ConfigPtr {
+			byte: &b"prof:true,prof_active:false,prof_gdump:false\0"[0],
+		}
+		.char
+	},
+);
 
 /// Enables profiling for an unprefixed jemalloc build.
 #[unsafe(export_name = "malloc_conf")]
@@ -39,7 +52,11 @@ fn profiling_state_round_trips() {
 	let global = ctl::is_prof_enabled().unwrap();
 	let thread = ctl::this_thread::is_prof_enabled().unwrap();
 	let gdump_key = ctl::raw::mibs("prof.gdump").unwrap();
-	let gdump = unsafe { ctl::raw::get::<bool>(&gdump_key) }.unwrap();
+
+	// SAFETY: this is the complete `prof.gdump` MIB, and `CBool` matches the
+	// platform C `bool` representation.
+	let gdump = unsafe { ctl::raw::get::<CBool>(&gdump_key) }.unwrap();
+	let gdump = gdump != CBool::default();
 
 	assert_eq!(ctl::prof_enable(global).unwrap(), global);
 	assert_eq!(ctl::prof_gdump(gdump).unwrap(), gdump);

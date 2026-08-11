@@ -6,41 +6,66 @@
 
 #![cfg(test)]
 
+use core::{ffi::CStr, ptr};
+
+#[repr(C)]
 union U {
 	x: &'static u8,
 	y: &'static libc::c_char,
 }
 
 /// The configuration string this binary links in, in place of jemalloc's own.
-#[allow(non_upper_case_globals)]
 #[cfg_attr(prefixed, unsafe(export_name = "_rjem_malloc_conf"))]
 #[cfg_attr(not(prefixed), unsafe(no_mangle))]
+#[cfg_attr(
+	prefixed,
+	expect(
+		non_upper_case_globals,
+		reason = "the identifier is the exported C symbol"
+	)
+)]
 pub static malloc_conf: Option<&'static libc::c_char> =
+	// SAFETY: `u8` and `c_char` have identical one-byte layouts, every bit
+	// pattern is valid, and the referenced NUL-terminated bytes are static.
 	Some(unsafe { U { x: &b"stats_print_opts:mdal\0"[0] }.y });
 
 #[test]
 fn malloc_conf_set() {
-	unsafe {
-		assert_eq!(jevmalloc_sys::malloc_conf, malloc_conf);
+	// SAFETY: jemalloc initializes this nullable C pointer before tests run and
+	// does not mutate it concurrently.
+	let linked = unsafe { jevmalloc_sys::malloc_conf };
 
-		let mut ptr: *const libc::c_char = core::ptr::null();
-		let mut ptr_len: libc::size_t = size_of::<*const libc::c_char>() as libc::size_t;
+	assert_eq!(linked.map(ptr::from_ref), malloc_conf.map(ptr::from_ref));
 
-		let r = jevmalloc_sys::mallctl(
+	let mut value: *const libc::c_char = ptr::null();
+	let mut value_len: libc::size_t = size_of::<*const libc::c_char>();
+
+	// SAFETY: the name is NUL-terminated; the output pointer and length are
+	// aligned, writable, and live; no input value is supplied.
+	let status = unsafe {
+		jevmalloc_sys::mallctl(
 			(&raw const b"opt.stats_print_opts\0"[0]).cast::<libc::c_char>(),
-			(&raw mut ptr).cast::<libc::c_void>(),
-			&raw mut ptr_len,
-			core::ptr::null_mut(),
+			(&raw mut value).cast::<libc::c_void>(),
+			&raw mut value_len,
+			ptr::null_mut(),
 			0,
-		);
+		)
+	};
 
-		assert_eq!(r, 0);
-		assert!(!ptr.is_null());
+	assert_eq!(status, 0);
+	assert_eq!(value_len, size_of::<*const libc::c_char>());
+	assert!(!value.is_null());
 
-		let s = core::ffi::CStr::from_ptr(ptr)
-			.to_string_lossy()
-			.into_owned();
+	// SAFETY: the successful control read returned a process-lifetime static,
+	// NUL-terminated string pointer.
+	let value = unsafe { CStr::from_ptr(value) };
 
-		assert!(s.contains("mdal"), "opt.stats_print_opts: \"{}\" (len = {})", s, s.len());
-	}
+	assert!(
+		value
+			.to_bytes()
+			.windows(4)
+			.any(|window| window == b"mdal"),
+		"opt.stats_print_opts: {value:?} (len = {})",
+		value.to_bytes().len()
+	);
 }

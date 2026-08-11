@@ -43,6 +43,9 @@ pub fn mibs(name: &str) -> Result<Key> {
 		.as_mut_ptr()
 		.cast::<size_t>();
 
+	// SAFETY: the validated name leaves a trailing NUL in `name_buf`.
+	// `key_ptr` has `key_len` aligned, writable `size_t` slots, and every
+	// pointee remains live for the call.
 	let status = unsafe {
 		ffi::mallctlnametomib(
 			name_buf.as_ptr().cast::<c_char>(),
@@ -56,7 +59,10 @@ pub fn mibs(name: &str) -> Result<Key> {
 		return Err(Error::invalid_argument());
 	}
 
+	// SAFETY: successful translation initialized the first `key_len` slots,
+	// and the checks above establish that they are within capacity.
 	unsafe { key.set_len(key_len) };
+
 	Ok(key)
 }
 
@@ -88,6 +94,10 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 
 	let mut value = MaybeUninit::<T>::uninit();
 	let mut value_len = expected;
+
+	// SAFETY: the caller supplies an exact readable MIB and the control's valid
+	// C output representation as `T`. The key, output, and length storage are
+	// aligned and remain live for the call.
 	let status = unsafe {
 		ffi::mallctlbymib(
 			key.as_ptr(),
@@ -101,6 +111,9 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 
 	cvt(status)?;
 	assert_eq!(value_len, expected, "jemalloc returned an unexpected control value size");
+
+	// SAFETY: successful completion and the caller's validity guarantee mean
+	// `value` contains a valid `T`; its reported size was checked above.
 	Ok(unsafe { value.assume_init() })
 }
 
@@ -124,6 +137,10 @@ pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 	let value_len = size_of::<T>();
 	assert!(value_len > 0, "use notify for a no-value control operation");
 
+	// SAFETY: the caller supplies an exact writable MIB and its exact C input
+	// type. `value` is aligned, readable, and live for the call, and jemalloc
+	// treats this shared input slot as read-only. Any contained pointer satisfies
+	// the control-specific pointee and retention obligations.
 	let status = unsafe {
 		ffi::mallctlbymib(
 			key.as_ptr(),
@@ -164,9 +181,13 @@ pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 	let expected = size_of::<T>();
 	assert!(expected > 0, "use notify for a no-value control operation");
-
 	let mut output = MaybeUninit::<T>::uninit();
 	let mut output_len = expected;
+
+	// SAFETY: the caller supplies an exact read-write MIB and its valid C type.
+	// The disjoint storage is aligned and live for the call, and jemalloc treats
+	// the shared input slot as read-only. Any contained pointer satisfies the
+	// control-specific pointee and retention obligations.
 	let status = unsafe {
 		ffi::mallctlbymib(
 			key.as_ptr(),
@@ -180,6 +201,9 @@ pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 
 	cvt(status)?;
 	assert_eq!(output_len, expected, "jemalloc returned an unexpected control value size");
+
+	// SAFETY: successful completion and the caller's validity guarantee mean
+	// `output` contains a valid `T`; its reported size was checked above.
 	Ok(unsafe { output.assume_init() })
 }
 
@@ -199,6 +223,8 @@ pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 /// semantic preconditions and account for every side effect. Some commands can
 /// destroy arenas or invalidate allocator state that safe Rust still relies on.
 pub unsafe fn notify(key: &Key) -> Result {
+	// SAFETY: the caller supplies an exact no-value command whose contract
+	// permits null value pointers and zero lengths. The key remains live.
 	let status = unsafe {
 		ffi::mallctlbymib(key.as_ptr(), key.len(), null_mut(), null_mut(), null_mut(), 0)
 	};

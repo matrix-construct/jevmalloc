@@ -27,7 +27,6 @@ rustflags = "0.1"
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
-#box_pointers = "warn"
 deprecated_in_future = "warn"
 elided_lifetimes_in_paths = "warn"
 explicit_outlives_requirements = "warn"
@@ -36,8 +35,8 @@ keyword_idents = { level = "warn", priority = -1 }
 macro_use_extern_crate = "warn"
 meta_variable_misuse = "warn"
 missing_abi = "warn"
-#missing_copy_implementations = "warn"
-#missing_debug_implementations = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
 missing_docs = "warn"
 missing_unsafe_on_extern = "warn"
 non_ascii_idents = "warn"
@@ -55,63 +54,25 @@ unused_extern_crates = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_macro_rules = "warn"
-unused_qualifications = "warn"
 
 # some sadness
-elided_named_lifetimes = "allow"
-mismatched_lifetime_syntaxes = "allow"
-let_underscore_drop = "allow"
 unexpected_cfgs = "allow"
-unused_braces = "allow"
-unused_crate_dependencies = "allow"
 unsafe_code = "allow"
-variant_size_differences = "allow"
-unknown_lints = "allow"
-renamed_and_removed_lints = "allow"
-unstable_name_collisions = "allow"
-trivial_numeric_casts = "allow"
+unused_crate_dependencies = "allow"
 
 [workspace.lints.clippy]
-cargo = { level = "warn", priority = -1 }
-multiple_crate_versions = { level = "allow", priority = 1 }
-complexity = { level = "warn", priority = -1 }
-needless_update = { level = "allow", priority = 1 }
-correctness = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
-missing_const_for_fn = { level = "allow", priority = 1 }
-option_if_let_else = { level = "allow", priority = 1 }
-redundant_pub_crate = { level = "allow", priority = 1 }
-significant_drop_in_scrutinee = { level = "allow", priority = 1 }
-significant_drop_tightening = { level = "allow", priority = 1 }
-tuple_array_conversions = { level = "allow", priority = 1 }
-pedantic = { level = "warn", priority = -1 }
-too_long_first_doc_paragraph = { level = "allow", priority = 1 }
-default_trait_access = { level = "allow", priority = 1 }
-doc_markdown = { level = "allow", priority = 1 }
-enum_glob_use = { level = "allow", priority = 1 }
-if_not_else = { level = "allow", priority = 1 }
-if_then_some_else_none = { level = "allow", priority = 1 }
-inline_always = { level = "allow", priority = 1 }
-map_unwrap_or = { level = "allow", priority = 1 }
-match_bool = { level = "allow", priority = 1 }
-match_same_arms = { level = "allow", priority = 1 }
-missing_docs_in_private_items = "warn"
-missing_errors_doc = "warn"
-missing_panics_doc = "warn"
-module_name_repetitions = { level = "allow", priority = 1 }
-needless_continue = { level = "allow", priority = 1 }
-no_effect_underscore_binding = { level = "allow", priority = 1 }
-similar_names = { level = "allow", priority = 1 }
-single_match_else = { level = "allow", priority = 1 }
-struct_excessive_bools = { level = "allow", priority = 1 }
-struct_field_names = { level = "allow", priority = 1 }
-unnecessary_wraps = { level = "allow", priority = 1 }
-unused_async = { level = "allow", priority = 1 }
-perf = { level = "warn", priority = -1 }
 as_underscore = "warn"
 assertions_on_result_states = "warn"
+cargo = { level = "warn", priority = -1 }
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
 dbg_macro = "warn"
+default_union_representation = "warn"
 deref_by_slicing = "warn"
+doc_markdown = "warn"
 empty_drop = "warn"
 empty_structs_with_brackets = "warn"
 exit = "warn"
@@ -119,11 +80,21 @@ filetype_is_file = "warn"
 float_cmp_const = "warn"
 format_push_string = "warn"
 get_unwrap = "warn"
+if_not_else = "warn"
+if_then_some_else_none = "warn"
 impl_trait_in_params = "warn"
+implicit_clone = "warn"
 let_underscore_untyped = "warn"
 lossy_float_literal = "warn"
 mem_forget = "warn"
+missing_docs_in_private_items = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+multiple_unsafe_ops_per_block = "warn"
 mutex_atomic = "warn"
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
 pub_without_shorthand = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
@@ -131,40 +102,30 @@ redundant_type_annotations = "warn"
 semicolon_outside_block = "warn"
 str_to_string = "warn"
 string_lit_chars_any = "warn"
-implicit_clone = "warn"
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
 suspicious_xor_used_as_pow = "warn"
 tests_outside_test_module = "warn"
+too_long_first_doc_paragraph = { level = "warn", priority = -11 }
 try_err = "warn"
+undocumented_unsafe_blocks = "warn"
 unnecessary_safety_comment = "warn"
 unnecessary_safety_doc = "warn"
 unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 verbose_file_reads = "warn"
-style = { level = "warn", priority = -1 }
-assertions_on_constants = { level = "allow", priority = 1 }
-module_inception = { level = "allow", priority = 1 }
-obfuscated_if_else = { level = "allow", priority = 1 }
-collapsible_if = { level = "allow", priority = 1 }
-suspicious = { level = "warn", priority = -1 }
-let_underscore_future = { level = "allow", priority = 1 }
-literal_string_with_formatting_args = { level = "allow", priority = 1 }
 
 # some sadness
-renamed_and_removed_lints = "allow"
-as_conversions = "allow"
-should_panic_without_expect = "allow"
-cast_possible_wrap = "allow"
-redundant_feature_names = "allow"
-cast_sign_loss = "allow"
 arithmetic_side_effects = "allow"
-missing_assert_message = "allow"
-unreadable_literal = "allow"
-collection_is_never_read = "allow"
-tabs_in_doc_comments = "allow"
-case_sensitive_file_extension_comparisons = "allow"
-cast_possible_truncation = "allow"
-string_slice = "allow"
-fn_to_numeric_cast_array = "allow"
-default_union_representation = "allow"
-fn_to_numeric_cast_any = "allow"
+as_conversions = "allow"
+collapsible_if = { level = "allow", priority = 1 }
+inline_always = { level = "allow", priority = 1 }
+map_unwrap_or = { level = "allow", priority = 1 }
+missing_const_for_fn = { level = "allow", priority = 1 }
+obfuscated_if_else = { level = "allow", priority = 1 }
+option_if_let_else = { level = "allow", priority = 1 }
+similar_names = { level = "allow", priority = 1 }
+single_match_else = { level = "allow", priority = 1 }
+struct_field_names = { level = "allow", priority = 1 }
+unreadable_literal = { level = "allow", priority = 1 }

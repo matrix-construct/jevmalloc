@@ -10,21 +10,21 @@ use libc::{c_uint, c_void, size_t};
 
 /// Extent lifetime management functions.
 ///
-/// The extent_hooks_t structure comprises function pointers which are described
-/// individually below. `jemalloc` uses these functions to manage extent
-/// lifetime, which starts off with allocation of mapped committed memory, in
-/// the simplest case followed by deallocation. However, there are performance
-/// and platform reasons to retain extents for later reuse. Cleanup attempts
-/// cascade from deallocation to decommit to forced purging to lazy purging,
-/// which gives the extent management functions opportunities to reject the most
-/// permanent cleanup operations in favor of less permanent (and often less
-/// costly) operations. All operations except allocation can be universally
+/// The `extent_hooks_t` structure comprises function pointers which are
+/// described individually below. `jemalloc` uses these functions to manage
+/// extent lifetime, which starts off with allocation of mapped committed
+/// memory, in the simplest case followed by deallocation. However, there are
+/// performance and platform reasons to retain extents for later reuse. Cleanup
+/// attempts cascade from deallocation to decommit to forced purging to lazy
+/// purging, which gives the extent management functions opportunities to reject
+/// the most permanent cleanup operations in favor of less permanent (and often
+/// less costly) operations. All operations except allocation can be universally
 /// opted out of by setting the hook pointers to `NULL`, or selectively opted
 /// out of by returning failure. Note that once the extent hook is set, the
 /// structure is accessed directly by the associated arenas, so it must remain
 /// valid for the entire lifetime of the arenas.
 #[repr(C)]
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct extent_hooks_s {
 	/// Obtains a new extent for the arena. The one hook an arena cannot do
 	/// without; leaving it null is not an option.

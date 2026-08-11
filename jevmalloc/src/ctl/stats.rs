@@ -12,6 +12,7 @@ use super::{Result, key, raw};
 /// Returns an error if jemalloc rejects the query.
 pub fn epoch() -> Result<u64> {
 	let key = key::epoch()?;
+
 	// SAFETY: `epoch` has the C output type `uint64_t`.
 	unsafe { raw::get(&key) }
 }
@@ -27,6 +28,7 @@ pub fn epoch() -> Result<u64> {
 /// Returns an error if jemalloc cannot refresh or return the epoch.
 pub fn refresh_epoch() -> Result<u64> {
 	let key = key::epoch()?;
+
 	// SAFETY: `epoch` has the C type `uint64_t` for input and output.
 	unsafe { raw::xchg(&key, &0_u64) }
 }
@@ -42,6 +44,7 @@ pub fn refresh_epoch() -> Result<u64> {
 #[cfg(feature = "stats")]
 pub fn stats_reset() -> Result {
 	let key = key::stats_mutexes_reset()?;
+
 	// SAFETY: this MIB selects only the mutex-statistics reset command.
 	unsafe { raw::notify(&key) }
 }

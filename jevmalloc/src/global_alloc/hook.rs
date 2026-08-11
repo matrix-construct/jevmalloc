@@ -21,16 +21,16 @@ use super::Layout;
 ///
 /// The callback receives the caller's original layout. Install or replace it
 /// only while no allocator operation can read the slot. Concurrent callback
-/// invocations are valid after installation, but a conflicting unsynchronized
-/// write to this mutable static is a data race.
+/// invocations are valid after installation. The callback must never unwind;
+/// a conflicting unsynchronized write to this mutable static is a data race.
 pub static mut ALLOC: Option<fn(Layout)> = None;
 
 /// Holds the callback invoked before a zeroed allocation.
 ///
 /// The callback receives the caller's original layout. Install or replace it
 /// only while no allocator operation can read the slot. Concurrent callback
-/// invocations are valid after installation, but a conflicting unsynchronized
-/// write to this mutable static is a data race.
+/// invocations are valid after installation. The callback must never unwind;
+/// a conflicting unsynchronized write to this mutable static is a data race.
 pub static mut ALLOC_ZEROED: Option<fn(Layout)> = None;
 
 /// Holds the callback invoked before a reallocation.
@@ -38,8 +38,8 @@ pub static mut ALLOC_ZEROED: Option<fn(Layout)> = None;
 /// The callback receives the original layout and pointer followed by the new
 /// requested size. Install or replace it only while no allocator operation can
 /// read the slot. Concurrent callback invocations are valid after installation,
-/// but a conflicting unsynchronized write to this mutable static is a data
-/// race.
+/// but the callback must never unwind. A conflicting unsynchronized write to
+/// this mutable static is a data race.
 pub static mut REALLOC: Option<fn(Layout, *const u8, usize)> = None;
 
 /// Holds the callback invoked before a deallocation.
@@ -47,5 +47,6 @@ pub static mut REALLOC: Option<fn(Layout, *const u8, usize)> = None;
 /// The callback receives the caller's original layout and allocation pointer.
 /// Install or replace it only while no allocator operation can read the slot,
 /// because a conflicting unsynchronized write is a data race. Concurrent
-/// callback invocations are valid after installation.
+/// callback invocations are valid after installation, but they must never
+/// unwind.
 pub static mut DEALLOC: Option<fn(Layout, *const u8)> = None;

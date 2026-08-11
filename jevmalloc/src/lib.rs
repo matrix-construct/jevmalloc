@@ -53,7 +53,7 @@ pub use self::global_alloc::layout::*;
 /// extended allocation API exported by [`ffi`].
 ///
 /// [`GlobalAlloc`]: core::alloc::GlobalAlloc
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Jemalloc;
 
 /// Installs jemalloc for the crate's unit tests.

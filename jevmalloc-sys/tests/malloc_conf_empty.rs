@@ -7,7 +7,8 @@
 
 #[test]
 fn malloc_conf_empty() {
-	unsafe {
-		assert!(jevmalloc_sys::malloc_conf.is_none());
-	}
+	// SAFETY: jemalloc initializes this nullable C pointer before tests run and
+	// does not mutate it concurrently.
+	let config = unsafe { jevmalloc_sys::malloc_conf };
+	assert!(config.is_none());
 }

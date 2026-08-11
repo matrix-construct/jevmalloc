@@ -13,10 +13,18 @@ static A: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 /// Checks that a word written through the raw allocation can be read and freed.
 #[test]
 fn smoke() {
-	unsafe {
-		let ptr = jevmalloc_sys::malloc(4);
-		*ptr.cast::<u32>() = 0xDECADE;
-		assert_eq!(*ptr.cast::<u32>(), 0xDECADE);
-		jevmalloc_sys::free(ptr);
-	}
+	// SAFETY: the nonzero request has no additional alignment requirement.
+	let ptr = unsafe { jevmalloc_sys::malloc(4) };
+	assert!(!ptr.is_null());
+
+	// SAFETY: `malloc` provides enough writable, suitably aligned storage for
+	// one `u32`.
+	unsafe { ptr.cast::<u32>().write(0xDECADE) };
+
+	// SAFETY: the preceding write initialized the live `u32` allocation.
+	let value = unsafe { ptr.cast::<u32>().read() };
+
+	// SAFETY: `ptr` is the still-live result from `malloc`.
+	unsafe { jevmalloc_sys::free(ptr) };
+	assert_eq!(value, 0xDECADE);
 }

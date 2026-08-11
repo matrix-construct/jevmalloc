@@ -25,6 +25,7 @@ pub(super) fn get_bool(key: &Key) -> Result<bool> {
 /// Exchanges a control whose C input and output types are both `bool`.
 pub(super) fn xchg_bool(key: &Key, value: bool) -> Result<bool> {
 	let value = encode_bool(value);
+
 	// SAFETY: callers select a control with `CBool` input and output types.
 	unsafe { raw::xchg(key, &value) }.map(decode_bool)
 }

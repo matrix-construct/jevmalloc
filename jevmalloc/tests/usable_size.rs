@@ -12,5 +12,8 @@ static A: Jemalloc = Jemalloc;
 #[test]
 fn smoke() {
 	let a = Box::new(3_u32);
+
+	// SAFETY: the raw pointer is the base of a live allocation made through the
+	// process-wide `Jemalloc`, and `a` remains alive during the query.
 	assert!(unsafe { jevmalloc::usable_size(&raw const *a) } >= 4);
 }

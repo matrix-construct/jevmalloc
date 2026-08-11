@@ -43,7 +43,7 @@
 //! [jemalloc_mallctl]: http://jemalloc.net/jemalloc.3.html#mallctl_namespace
 
 #![no_std]
-#![allow(nonstandard_style, non_camel_case_types)]
+#![expect(nonstandard_style, non_camel_case_types)]
 
 mod control;
 /// Target classifications gating jemalloc support and configuration.

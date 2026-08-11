@@ -17,7 +17,10 @@ static A: Jemalloc = Jemalloc;
 
 /// Checks that an ordinary vector allocation succeeds through jemalloc.
 #[test]
-#[allow(clippy::reserve_after_initialization)]
+#[expect(
+	clippy::reserve_after_initialization,
+	clippy::collection_is_never_read
+)]
 fn smoke() {
 	let mut a = Vec::new();
 	a.reserve(1);
@@ -34,21 +37,30 @@ fn overaligned() {
 	// Deliberately exceed the requested size to exercise the regression.
 	let align = 16;
 	let iterations = 100;
-	unsafe {
-		let pointers: Vec<_> = (0..iterations)
-			.map(|_| {
-				let ptr = Jemalloc.alloc(Layout::from_size_align(size, align).unwrap());
-				assert!(!ptr.is_null());
-				ptr
-			})
-			.collect();
-		for &ptr in &pointers {
-			assert_eq!((ptr as usize) % align, 0, "Got a pointer less aligned than requested");
+	let layout = Layout::from_size_align(size, align).unwrap();
+	let mut pointers = Vec::with_capacity(iterations);
+	for _ in 0..iterations {
+		// SAFETY: `layout` is valid and nonzero.
+		let ptr = unsafe { Jemalloc.alloc(layout) };
+		if ptr.is_null() {
+			for ptr in pointers {
+				// SAFETY: every pointer is a distinct live allocation from
+				// `Jemalloc` created with this exact layout.
+				unsafe { Jemalloc.dealloc(ptr, layout) };
+			}
+			panic!("allocation failed");
 		}
-
-		// Return every live allocation with the same layout used to create it.
-		for &ptr in &pointers {
-			Jemalloc.dealloc(ptr, Layout::from_size_align(size, align).unwrap());
-		}
+		pointers.push(ptr);
 	}
+	let aligned = pointers
+		.iter()
+		.all(|ptr| ptr.addr().is_multiple_of(align));
+
+	for ptr in pointers {
+		// SAFETY: every pointer is a distinct live allocation from `Jemalloc`
+		// created with this exact layout.
+		unsafe { Jemalloc.dealloc(ptr, layout) };
+	}
+
+	assert!(aligned, "Got a pointer less aligned than requested");
 }

@@ -17,6 +17,7 @@ use super::{Result, key, raw, value};
 /// Returns an error if runtime profiling is unavailable or the reset fails.
 pub fn prof_reset() -> Result {
 	let key = key::prof_reset()?;
+
 	// SAFETY: this MIB selects `prof.reset` with its optional input omitted.
 	unsafe { raw::notify(&key) }
 }
@@ -31,6 +32,7 @@ pub fn prof_reset() -> Result {
 /// Returns an error if runtime profiling is unavailable or the dump fails.
 pub fn prof_dump() -> Result {
 	let key = key::prof_dump()?;
+
 	// SAFETY: this MIB selects `prof.dump` with its optional filename omitted.
 	unsafe { raw::notify(&key) }
 }
@@ -84,6 +86,7 @@ pub fn is_prof_enabled() -> Result<bool> {
 /// Returns an error if jemalloc rejects the query.
 pub fn prof_interval() -> Result<u64> {
 	let key = key::prof_interval()?;
+
 	// SAFETY: `prof.interval` has the C output type `uint64_t`.
 	unsafe { raw::get(&key) }
 }

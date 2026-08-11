@@ -86,8 +86,9 @@ macro_rules! warning {
     }
 }
 
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::cognitive_complexity)]
+#[expect(clippy::too_many_lines)]
+#[expect(clippy::cognitive_complexity)]
+#[expect(clippy::case_sensitive_file_extension_comparisons)]
 fn main() {
 	let target = expect_env("TARGET");
 	let host = expect_env("HOST");
@@ -214,7 +215,7 @@ fn main() {
 	// Copy jemalloc submodule to the OUT_DIR
 	copy_recursively(&jemalloc_repo_dir, &build_dir)
 		.expect("failed to copy jemalloc source code to OUT_DIR");
-	assert!(build_dir.exists());
+	assert!(build_dir.exists(), "build_dir does not exist");
 
 	// Configuration files
 	let config_files = ["configure"];

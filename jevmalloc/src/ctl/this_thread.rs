@@ -57,6 +57,7 @@ pub fn decay() -> Result { notify_by_arena(Some(arena_id()?), key::thread_arena_
 /// Returns an error if jemalloc rejects the idle notification.
 pub fn idle() -> Result {
 	let key = key::thread_idle()?;
+
 	// SAFETY: this MIB selects only the current-thread idle notification.
 	unsafe { raw::notify(&key) }
 }
@@ -71,6 +72,7 @@ pub fn idle() -> Result {
 /// Returns an error if the thread has no cache or jemalloc rejects the command.
 pub fn flush() -> Result {
 	let key = key::thread_tcache_flush()?;
+
 	// SAFETY: this MIB selects only the current-thread cache flush command.
 	unsafe { raw::notify(&key) }
 }
@@ -157,6 +159,7 @@ pub fn is_cache_enabled() -> Result<bool> {
 pub fn set_arena(id: usize) -> Result<usize> {
 	let id = c_uint::try_from(id).map_err(|_| Error::invalid_argument())?;
 	let key = key::thread_arena()?;
+
 	// SAFETY: `thread.arena` has C type `unsigned` for input and output.
 	let previous = unsafe { raw::xchg(&key, &id) }?;
 	previous
@@ -172,6 +175,7 @@ pub fn set_arena(id: usize) -> Result<usize> {
 /// fit in `usize`.
 pub fn arena_id() -> Result<usize> {
 	let key = key::thread_arena()?;
+
 	// SAFETY: `thread.arena` has the C output type `unsigned`.
 	let id = unsafe { raw::get::<c_uint>(&key) }?;
 	id.try_into()
@@ -216,6 +220,7 @@ pub fn is_prof_enabled() -> Result<bool> {
 #[cfg(feature = "stats")]
 pub fn reset_peak() -> Result {
 	let key = key::thread_peak_reset()?;
+
 	// SAFETY: this MIB selects only the current-thread peak reset command.
 	unsafe { raw::notify(&key) }
 }
@@ -228,6 +233,7 @@ pub fn reset_peak() -> Result {
 #[cfg(feature = "stats")]
 pub fn peak() -> Result<u64> {
 	let key = key::thread_peak_read()?;
+
 	// SAFETY: `thread.peak.read` has the C output type `uint64_t`.
 	unsafe { raw::get(&key) }
 }
@@ -243,6 +249,7 @@ pub fn peak() -> Result<u64> {
 #[cfg(feature = "stats")]
 pub fn allocated() -> Result<u64> {
 	let key = key::thread_allocated()?;
+
 	// SAFETY: `thread.allocated` has the C output type `uint64_t`.
 	unsafe { raw::get(&key) }
 }
@@ -258,6 +265,7 @@ pub fn allocated() -> Result<u64> {
 #[cfg(feature = "stats")]
 pub fn deallocated() -> Result<u64> {
 	let key = key::thread_deallocated()?;
+
 	// SAFETY: `thread.deallocated` has the C output type `uint64_t`.
 	unsafe { raw::get(&key) }
 }
@@ -269,7 +277,7 @@ pub fn deallocated() -> Result<u64> {
 /// neither `Send` nor `Sync`, so safe Rust cannot move it away from the thread
 /// whose allocator state it observes.
 #[cfg(feature = "stats")]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ThreadCounters {
 	/// Jemalloc's current-thread allocated-byte counter.
 	allocated: NonNull<u64>,
@@ -295,6 +303,7 @@ impl ThreadCounters {
 
 		// SAFETY: the two controls return pointers to their `uint64_t` counters.
 		let allocated = unsafe { raw::get::<*mut u64>(&allocated_key) }?;
+
 		// SAFETY: this is the distinct deallocated-counter MIB and pointer type.
 		let deallocated = unsafe { raw::get::<*mut u64>(&deallocated_key) }?;
 
