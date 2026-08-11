@@ -95,7 +95,7 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 	let mut value_len = expected;
 	let mut value = MaybeUninit::<T>::uninit();
 
-	debug_assert!(expected > 0, "use notify for a no-value control operation");
+	assert!(expected > 0, "use notify for a no-value control operation");
 
 	// SAFETY: the caller supplies an exact readable MIB and the control's valid
 	// C output representation as `T`. The key, output, and length storage are
@@ -120,6 +120,53 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 	Ok(unsafe { value.assume_init() })
 }
 
+/// Reads a control into caller-initialized output storage.
+///
+/// This supports controls such as `arena.<i>.name` that interpret the initial
+/// output value before writing through it. Ordinary scalar controls should use
+/// [`get`] instead.
+///
+/// # Errors
+///
+/// Returns an error if jemalloc rejects the MIB, access, or output size.
+///
+/// # Panics
+///
+/// Panics if `T` is zero-sized or jemalloc succeeds with an output size other
+/// than `size_of::<T>()`.
+///
+/// # Safety
+///
+/// `key` must be the exact, complete MIB for a readable control. `T` and its
+/// initial value must satisfy the control's C output type and initialization
+/// contract. Because jemalloc can modify the storage before reporting an
+/// error, the value must contain a valid `T` on every return path.
+pub unsafe fn get_in_place<T: Copy>(key: &Key, value: &mut T) -> Result {
+	let expected = size_of::<T>();
+	let mut value_len = expected;
+
+	assert!(expected > 0, "use notify for a no-value control operation");
+
+	// SAFETY: the caller supplies an exact readable MIB and initialized storage
+	// matching its C output contract. The key, output, and length remain live.
+	let status = unsafe {
+		ffi::mallctlbymib(
+			key.as_ptr(),
+			key.len(),
+			addr_of_mut!(*value).cast::<c_void>(),
+			addr_of_mut!(value_len).cast::<size_t>(),
+			null_mut(),
+			0,
+		)
+	};
+
+	into_result(status)?;
+
+	assert_eq!(value_len, expected, "jemalloc returned an unexpected control value size");
+
+	Ok(())
+}
+
 /// Writes `value` to the control selected by `key`.
 ///
 /// # Errors
@@ -139,7 +186,7 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 	let value_len = size_of::<T>();
 
-	debug_assert!(value_len > 0, "use notify for a no-value control operation");
+	assert!(value_len > 0, "use notify for a no-value control operation");
 
 	// SAFETY: the caller supplies an exact writable MIB and its exact C input
 	// type. `value` is aligned, readable, and live for the call, and jemalloc
@@ -183,16 +230,46 @@ pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 /// must satisfy all control-specific accessibility, aliasing, and lifetime
 /// requirements.
 pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
-	let expected = size_of::<T>();
+	// SAFETY: the caller guarantees that the complete MIB uses `T` for both its
+	// C input and output, including every pointer and representation invariant.
+	unsafe { update(key, value) }
+}
+
+/// Supplies one typed value to a control and returns a differently typed value.
+///
+/// This supports controls such as `arenas.create` and `arenas.lookup`, whose C
+/// input and output types differ. Use [`xchg`] when both types are identical.
+///
+/// # Errors
+///
+/// Returns an error if jemalloc rejects the MIB, access, or either value size.
+/// Some controls perform their write before detecting an invalid output buffer,
+/// so an error does not universally prove that no side effect occurred.
+///
+/// # Panics
+///
+/// Panics if either type is zero-sized or jemalloc succeeds with an output size
+/// other than `size_of::<O>()`.
+///
+/// # Safety
+///
+/// `key` must be the exact, complete MIB for a control that accepts
+/// simultaneous input and output. `I` must exactly match its C input type, and
+/// `O` must match every successful C output representation. Pointer values must
+/// satisfy all control-specific accessibility, aliasing, and lifetime
+/// requirements.
+pub unsafe fn update<I, O: Copy>(key: &Key, value: &I) -> Result<O> {
+	let input_len = size_of::<I>();
+	let expected = size_of::<O>();
 	let mut output_len = expected;
-	let mut output = MaybeUninit::<T>::uninit();
+	let mut output = MaybeUninit::<O>::uninit();
 
-	debug_assert!(expected > 0, "use notify for a no-value control operation");
+	assert!(input_len > 0, "use get for a control without an input value");
+	assert!(expected > 0, "use set for a control without an output value");
 
-	// SAFETY: the caller supplies an exact read-write MIB and its valid C type.
-	// The disjoint storage is aligned and live for the call, and jemalloc treats
-	// the shared input slot as read-only. Any contained pointer satisfies the
-	// control-specific pointee and retention obligations.
+	// SAFETY: the caller supplies a complete MIB and its exact C input and
+	// output types. All storage is aligned and live, and pointer values satisfy
+	// the control-specific accessibility and retention obligations.
 	let status = unsafe {
 		ffi::mallctlbymib(
 			key.as_ptr(),
@@ -200,7 +277,7 @@ pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 			output.as_mut_ptr().cast::<c_void>(),
 			addr_of_mut!(output_len).cast::<size_t>(),
 			addr_of!(*value).cast::<c_void>().cast_mut(),
-			expected,
+			input_len,
 		)
 	};
 
@@ -209,7 +286,7 @@ pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 	assert_eq!(output_len, expected, "jemalloc returned an unexpected control value size");
 
 	// SAFETY: successful completion and the caller's validity guarantee mean
-	// `output` contains a valid `T`; its reported size was checked above.
+	// `output` contains a valid `O`; its reported size was checked above.
 	Ok(unsafe { output.assume_init() })
 }
 

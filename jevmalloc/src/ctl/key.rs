@@ -35,21 +35,25 @@ macro_rules! define_key {
 define_key!(epoch, "epoch");
 define_key!(background_thread, "background_thread");
 define_key!(opt_percpu_arena, "opt.percpu_arena");
-define_key!(arena_purge, "arena.4096.purge");
-define_key!(arena_decay, "arena.4096.decay");
-define_key!(arena_muzzy_decay, "arena.4096.muzzy_decay_ms");
-define_key!(arena_dirty_decay, "arena.4096.dirty_decay_ms");
+define_key!(arena_purge, "arena.0.purge");
+define_key!(arena_decay, "arena.0.decay");
+define_key!(arena_reset, "arena.0.reset");
+define_key!(arena_destroy, "arena.0.destroy");
+define_key!(arena_name, "arena.0.name");
+define_key!(arena_dss, "arena.0.dss");
+define_key!(arena_muzzy_decay, "arena.0.muzzy_decay_ms");
+define_key!(arena_dirty_decay, "arena.0.dirty_decay_ms");
+define_key!(arena_retain_grow_limit, "arena.0.retain_grow_limit");
+define_key!(arena_extent_hooks, "arena.0.extent_hooks");
+define_key!(arenas_create, "arenas.create");
+define_key!(arenas_lookup, "arenas.lookup");
 define_key!(arenas_muzzy_decay, "arenas.muzzy_decay_ms");
 define_key!(arenas_dirty_decay, "arenas.dirty_decay_ms");
-define_key!(arenas_count, "arenas.narenas");
+define_key!(arenas_limit, "arenas.narenas");
 define_key!(arenas_quantum, "arenas.quantum");
 define_key!(thread_idle, "thread.idle");
 define_key!(thread_arena, "thread.arena");
 define_key!(thread_tcache_flush, "thread.tcache.flush");
-define_key!(thread_arena_purge, "arena.0.purge");
-define_key!(thread_arena_decay, "arena.0.decay");
-define_key!(thread_muzzy_decay, "arena.0.muzzy_decay_ms");
-define_key!(thread_dirty_decay, "arena.0.dirty_decay_ms");
 define_key!(thread_tcache_enabled, "thread.tcache.enabled");
 
 #[cfg(feature = "profiling")]

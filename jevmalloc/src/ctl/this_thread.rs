@@ -9,11 +9,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use libc::c_uint;
 
-use super::{
-	Error, Result,
-	arena::{get_by_arena, notify_by_arena, set_by_arena},
-	key, raw, value,
-};
+use super::{Arena, Error, Result, arena, key, raw, value};
 
 /// Reclaims unused pages from the calling thread's arena.
 ///
@@ -25,9 +21,9 @@ use super::{
 /// Returns an error if the thread arena cannot be read or either reclamation
 /// command fails.
 pub fn trim() -> Result {
-	let arena = Some(arena_id()?);
-	notify_by_arena(arena, key::thread_arena_decay()?)?;
-	notify_by_arena(arena, key::thread_arena_purge()?)
+	let arena = Arena::current()?;
+
+	arena.trim()
 }
 
 /// Purges all unused dirty pages from the calling thread's arena.
@@ -36,7 +32,7 @@ pub fn trim() -> Result {
 ///
 /// Returns an error if the thread arena cannot be read or jemalloc rejects the
 /// purge command.
-pub fn purge() -> Result { notify_by_arena(Some(arena_id()?), key::thread_arena_purge()?) }
+pub fn purge() -> Result { Arena::current()?.purge() }
 
 /// Applies decay-based purging to the calling thread's arena.
 ///
@@ -44,7 +40,7 @@ pub fn purge() -> Result { notify_by_arena(Some(arena_id()?), key::thread_arena_
 ///
 /// Returns an error if the thread arena cannot be read or jemalloc rejects the
 /// decay command.
-pub fn decay() -> Result { notify_by_arena(Some(arena_id()?), key::thread_arena_decay()?) }
+pub fn decay() -> Result { Arena::current()?.decay() }
 
 /// Notifies jemalloc that the calling thread is entering an extended idle
 /// period.
@@ -88,7 +84,7 @@ pub fn flush() -> Result {
 /// Returns an error if the thread arena cannot be read or jemalloc rejects the
 /// value.
 pub fn set_muzzy_decay(decay_ms: isize) -> Result<isize> {
-	set_by_arena(Some(arena_id()?), key::thread_muzzy_decay()?, decay_ms)
+	Arena::current()?.set_muzzy_decay(decay_ms)
 }
 
 /// Returns the calling thread arena's muzzy-page decay interval.
@@ -97,9 +93,7 @@ pub fn set_muzzy_decay(decay_ms: isize) -> Result<isize> {
 ///
 /// Returns an error if the thread arena cannot be read or jemalloc rejects the
 /// query.
-pub fn get_muzzy_decay() -> Result<isize> {
-	get_by_arena(Some(arena_id()?), key::thread_muzzy_decay()?)
-}
+pub fn get_muzzy_decay() -> Result<isize> { Arena::current()?.muzzy_decay() }
 
 /// Sets the calling thread arena's dirty-page decay interval.
 ///
@@ -112,7 +106,7 @@ pub fn get_muzzy_decay() -> Result<isize> {
 /// Returns an error if the thread arena cannot be read or jemalloc rejects the
 /// value.
 pub fn set_dirty_decay(decay_ms: isize) -> Result<isize> {
-	set_by_arena(Some(arena_id()?), key::thread_dirty_decay()?, decay_ms)
+	Arena::current()?.set_dirty_decay(decay_ms)
 }
 
 /// Returns the calling thread arena's dirty-page decay interval.
@@ -121,9 +115,7 @@ pub fn set_dirty_decay(decay_ms: isize) -> Result<isize> {
 ///
 /// Returns an error if the thread arena cannot be read or jemalloc rejects the
 /// query.
-pub fn get_dirty_decay() -> Result<isize> {
-	get_by_arena(Some(arena_id()?), key::thread_dirty_decay()?)
-}
+pub fn get_dirty_decay() -> Result<isize> { Arena::current()?.dirty_decay() }
 
 /// Enables or disables the calling thread's automatic allocation cache.
 ///
@@ -156,8 +148,16 @@ pub fn is_cache_enabled() -> Result<bool> {
 ///
 /// Returns an error if `id` does not fit jemalloc's unsigned arena type or if
 /// jemalloc rejects the reassignment.
-pub fn set_arena(id: usize) -> Result<usize> {
-	let id = c_uint::try_from(id).map_err(|_| Error::invalid_argument())?;
+///
+/// # Safety
+///
+/// Every allocation made through the association must be dead before the arena
+/// is reset or destroyed. The thread must first move elsewhere and flush every
+/// automatic or explicit tcache that touched the arena. All handles and
+/// operations involving either association must remain synchronized with
+/// reset, destruction, and index recycling.
+pub unsafe fn set_arena(id: usize) -> Result<usize> {
+	let id = arena::validated_index(id)?;
 	let key = key::thread_arena()?;
 
 	// SAFETY: `thread.arena` has C type `unsigned` for input and output.

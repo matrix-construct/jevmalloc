@@ -75,19 +75,19 @@ fn epoch_refresh_is_explicit() {
 /// Checks the global arena queries and the documented affinity predicates.
 #[test]
 fn arena_queries_are_consistent() {
-	assert!(ctl::arenas().unwrap() > 0);
-	assert!(ctl::quantum().unwrap() > 0);
+	assert!(ctl::arenas::limit().unwrap() > 0);
+	assert!(ctl::arenas::quantum().unwrap() > 0);
 
-	let mode = ctl::percpu_arenas().unwrap();
+	let mode = ctl::arenas::percpu_mode().unwrap();
 	assert!(matches!(mode, "disabled" | "percpu" | "phycpu"));
-	assert_eq!(ctl::is_percpu_arena(), mode == "percpu");
-	assert_eq!(ctl::is_phycpu_arena(), mode == "phycpu");
-	assert_eq!(ctl::is_affine_arena(), mode != "disabled");
+	assert_eq!(ctl::arenas::is_percpu(), mode == "percpu");
+	assert_eq!(ctl::arenas::is_phycpu(), mode == "phycpu");
+	assert_eq!(ctl::arenas::is_affine(), mode != "disabled");
 }
 
 /// Checks both all-arena reclamation commands through the migrated entry point.
 #[test]
-fn all_arenas_trim() { ctl::trim(None).unwrap(); }
+fn all_arenas_trim() { ctl::arenas::trim().unwrap(); }
 
 /// Checks that updating the background setting returns its current value.
 #[test]
@@ -104,32 +104,58 @@ fn background_thread_exchange() {
 	assert_eq!(previous, enabled);
 }
 
-/// Checks future-arena decay defaults without changing their values.
+/// Checks future-arena decay exchanges with distinct values and restores them.
 #[test]
 fn future_arena_decay_exchange() {
 	let _guard = CONTROL.lock().unwrap();
-	let muzzy_key = ctl::raw::mibs("arenas.muzzy_decay_ms").unwrap();
-	let dirty_key = ctl::raw::mibs("arenas.dirty_decay_ms").unwrap();
+	let muzzy = ctl::arenas::muzzy_decay().unwrap();
+	let dirty = ctl::arenas::dirty_decay().unwrap();
+	let other_muzzy = isize::from(muzzy == 0);
+	let other_dirty = isize::from(dirty == 0);
 
-	// SAFETY: this complete MIB has C output type `ssize_t`, represented by
-	// `isize` on supported targets.
-	let muzzy = unsafe { ctl::raw::get::<isize>(&muzzy_key) }.unwrap();
+	let previous_muzzy = ctl::arenas::set_muzzy_decay(other_muzzy).unwrap();
+	let replaced_muzzy = ctl::arenas::set_muzzy_decay(muzzy).unwrap();
+	let previous_dirty = ctl::arenas::set_dirty_decay(other_dirty).unwrap();
+	let replaced_dirty = ctl::arenas::set_dirty_decay(dirty).unwrap();
 
-	// SAFETY: this complete MIB has C output type `ssize_t`, represented by
-	// `isize` on supported targets.
-	let dirty = unsafe { ctl::raw::get::<isize>(&dirty_key) }.unwrap();
+	assert_eq!(previous_muzzy, muzzy);
+	assert_eq!(replaced_muzzy, other_muzzy);
+	assert_eq!(previous_dirty, dirty);
+	assert_eq!(replaced_dirty, other_dirty);
+}
 
-	assert_eq!(ctl::set_muzzy_decay(None, muzzy).unwrap(), muzzy);
-	assert_eq!(ctl::set_dirty_decay(None, dirty).unwrap(), dirty);
+/// Checks that a DSS exchange reports the resulting future-arena default.
+#[test]
+fn future_arena_dss_exchange() {
+	let _guard = CONTROL.lock().unwrap();
+	let current = ctl::arenas::dss().unwrap();
+	let other = match current {
+		| ctl::Dss::Disabled => ctl::Dss::Secondary,
+		| ctl::Dss::Primary | ctl::Dss::Secondary => ctl::Dss::Disabled,
+	};
+
+	match ctl::arenas::set_dss(other) {
+		| Ok(resulting) => {
+			let restored = ctl::arenas::set_dss(current).unwrap();
+
+			assert_eq!(resulting, other);
+			assert_eq!(restored, current);
+		},
+		| Err(error) => {
+			assert_eq!(current, ctl::Dss::Disabled);
+			assert!(error.is(libc::EFAULT));
+		},
+	}
 }
 
 /// Checks current-thread MIB substitution and scalar exchanges.
 #[test]
 fn current_thread_controls() {
 	let arena = ctl::this_thread::arena_id().unwrap();
-	assert!(arena < ctl::arenas().unwrap());
-	if !ctl::is_affine_arena() {
-		assert_eq!(ctl::this_thread::set_arena(arena).unwrap(), arena);
+	assert!(arena < ctl::arenas::limit().unwrap());
+	if !ctl::arenas::is_affine() {
+		// SAFETY: reselecting the current arena changes no allocation lifetime.
+		assert_eq!(unsafe { ctl::this_thread::set_arena(arena) }.unwrap(), arena);
 	}
 
 	let muzzy = ctl::this_thread::get_muzzy_decay().unwrap();

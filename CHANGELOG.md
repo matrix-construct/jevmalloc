@@ -1,5 +1,9 @@
 # Unreleased
 
+- Model explicitly created jemalloc arenas as lifecycle-owning `ctl::Arena`
+  objects. Cover every documented non-statistics instance control, custom extent
+  hook construction and replacement, allocation lookup, recoverable destruction,
+  and allocator-wide defaults under `ctl::arenas`.
 - Replace the generated TikV-style `ctl` option tree with a compact MIB-only
   interface for the arena, thread, profiling, epoch, and mutex-statistics
   controls used by Tuwunel. Built-in MIBs use process-wide caches.

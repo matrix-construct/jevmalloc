@@ -20,7 +20,7 @@
 //! static ALLOC: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 //!
 //! # fn main() -> Result<(), jevmalloc::ctl::Error> {
-//! let quantum = jevmalloc::ctl::quantum()?;
+//! let quantum = jevmalloc::ctl::arenas::quantum()?;
 //! let epoch = jevmalloc::ctl::refresh_epoch()?;
 //! assert!(quantum > 0);
 //! assert!(epoch > 0);

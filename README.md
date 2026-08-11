@@ -55,9 +55,9 @@ process-wide after translation, and every subsequent control access uses
 use jevmalloc::ctl;
 
 fn main() -> Result<(), ctl::Error> {
-    let arena = ctl::this_thread::arena_id()?;
-    let decay = ctl::this_thread::get_muzzy_decay()?;
-    ctl::decay(arena)?;
+    let arena = ctl::Arena::current()?;
+    let decay = arena.muzzy_decay()?;
+    arena.decay()?;
     let epoch = ctl::refresh_epoch()?;
 
     println!("muzzy decay: {decay} ms, refreshed epoch: {epoch}");
@@ -65,11 +65,19 @@ fn main() -> Result<(), ctl::Error> {
 }
 ```
 
-Thread arena controls resolve an `arena.0.*` template and replace the numeric
-arena component with `thread.arena`. The top-level reclamation functions accept
-either an arena identifier or `None`; `None` uses jemalloc's value `4096` for
-all arenas. Decay setters treat `None` differently by updating the defaults for
-arenas created later.
+`ctl::Arena` represents one borrowed or explicitly created arena and exposes its
+reclamation, decay, name, DSS, retained-growth, extent-hook, reset, and destroy
+controls as methods. An arena created with `Arena::create` owns its lifecycle
+and performs a best effort destroy when dropped. Allocation routing, reset,
+explicit destruction, and custom hooks are unsafe because jemalloc cannot prove
+that allocations, caches, callbacks, or thread associations have ended.
+Constructing an unpinned handle from a raw arena index is likewise unsafe
+because the caller must synchronize it with destruction and index recycling.
+
+Allocator-wide queries, future-arena defaults, and the all-arenas reclamation
+commands live under `ctl::arenas`. Thread controls resolve an `arena.0.*`
+template and replace the numeric component with `thread.arena` before delegating
+to the same instance methods.
 
 Epoch refresh is explicit. Ordinary configuration and thread queries read live
 state and do not force a process-wide statistics refresh. With the `stats`
@@ -78,9 +86,10 @@ the calling thread's allocation counters without exposing them as immutable
 static references.
 
 `ctl::raw` resolves ad hoc names and exposes unsafe generic MIB reads, writes,
-exchanges, and commands. Value operations require the Rust type to match the
-selected C control exactly, while commands require the caller to uphold their
-semantic preconditions. Prefer the safe curated functions when one exists.
+mixed-type updates, exchanges, and commands. Value operations require the Rust
+type to match the selected C control exactly, while commands require the caller
+to uphold their semantic preconditions. Prefer the curated object methods when
+one exists.
 
 Profiling controls are present with the `profiling` feature. Compiling that
 support does not activate profiling; jemalloc must also start with `prof:true`

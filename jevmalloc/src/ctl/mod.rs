@@ -1,11 +1,9 @@
 //! Opinionated control and introspection for jemalloc.
 //!
-//! This module exposes the small set of allocator controls used by Tuwunel.
 //! Every built-in control keeps a process-wide cache after successful MIB
-//! translation, then calls `mallctlbymib` directly. Arena controls share one
-//! implementation: [`this_thread`] substitutes the calling thread's arena,
-//! explicit arena operations substitute the requested identifier, and `None`
-//! selects all arenas where jemalloc supports that convention.
+//! translation, then calls `mallctlbymib` directly. [`Arena`] represents one
+//! explicitly created or borrowed instance, while [`arenas`] contains allocator
+//! defaults and the controls that intentionally select all arenas.
 //!
 //! The safe functions encode each selected control's C value type. The
 //! [`raw`] module remains available for controls outside this curated surface,
@@ -20,6 +18,7 @@ mod profiling;
 mod stats;
 mod value;
 
+pub mod arenas;
 pub mod raw;
 pub mod this_thread;
 
@@ -31,8 +30,7 @@ pub use self::profiling::{
 pub use self::stats::stats_reset;
 pub use self::{
 	arena::{
-		arenas, decay, is_affine_arena, is_percpu_arena, is_phycpu_arena, percpu_arenas, purge,
-		quantum, set_dirty_decay, set_muzzy_decay, trim,
+		ARENA_INDEX_LIMIT, ARENA_NAME_LEN, Arena, ArenaDestroyError, ArenaName, Dss, ExtentHooks,
 	},
 	error::Error,
 	key::{KEY_SEGS, Key, NAME_MAX},

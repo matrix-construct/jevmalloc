@@ -385,7 +385,7 @@ fn dropping_the_alignment_keeps_the_size_class() {
 /// underalignment.
 #[test]
 fn jemalloc_quantum_covers_the_rust_quantum() {
-	let quantum = ctl::quantum().unwrap();
+	let quantum = ctl::arenas::quantum().unwrap();
 
 	assert!(quantum >= QUANTUM, "jemalloc quantum {quantum} is below the assumed {QUANTUM}");
 }
