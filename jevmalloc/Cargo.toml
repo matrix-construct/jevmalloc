@@ -33,8 +33,11 @@ stats = ["jevmalloc-sys/stats"]
 unprefixed_malloc_on_supported_platforms = ["jevmalloc-sys/unprefixed_malloc_on_supported_platforms"]
 
 [dependencies]
+arrayvec.workspace = true
 jevmalloc-sys.workspace = true
 libc.workspace = true
+
+[dev-dependencies]
 paste.workspace = true
 
 [lib]
@@ -42,6 +45,14 @@ bench = false
 
 [[test]]
 name = "ffi"
+required-features = ["stats"]
+
+[[test]]
+name = "ctl_profiling"
+required-features = ["profiling"]
+
+[[test]]
+name = "ctl_stats"
 required-features = ["stats"]
 
 [lints]

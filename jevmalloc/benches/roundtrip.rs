@@ -9,6 +9,7 @@
 #![cfg(test)]
 #![cfg(bench)]
 #![cfg_attr(bench, feature(test))]
+#![allow(unstable_features)]
 
 /// Unstable benchmark harness supplied by the Rust toolchain.
 extern crate test;

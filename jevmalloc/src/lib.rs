@@ -12,7 +12,21 @@
 //!
 //! [`Jemalloc`] implements [`GlobalAlloc`] and can service the process-wide
 //! `#[global_allocator]` slot. The [`ctl`] module wraps jemalloc's control and
-//! introspection API, while [`ffi`] re-exports the underlying C bindings.
+//! introspection API with a compact MIB-only surface, while [`ffi`] re-exports
+//! the underlying C bindings.
+//!
+//! ```
+//! #[global_allocator]
+//! static ALLOC: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
+//!
+//! # fn main() -> Result<(), jevmalloc::ctl::Error> {
+//! let quantum = jevmalloc::ctl::quantum()?;
+//! let epoch = jevmalloc::ctl::refresh_epoch()?;
+//! assert!(quantum > 0);
+//! assert!(epoch > 0);
+//! # Ok(())
+//! # }
+//! ```
 //!
 //! [`GlobalAlloc`]: core::alloc::GlobalAlloc
 
@@ -29,6 +43,7 @@ use ::core as std;
 /// contracts documented there.
 pub use ::jevmalloc_sys as ffi;
 
+/// Re-exports the allocator layout utilities.
 pub use self::global_alloc::layout::*;
 
 /// Selects jemalloc as a Rust global allocator.

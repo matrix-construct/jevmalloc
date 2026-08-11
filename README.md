@@ -21,8 +21,8 @@ Two crates, and the C source they vendor:
   how to move it.
 * `jevmalloc`: provides the `Jemalloc` type implementing `GlobalAlloc`, a
   re-export of the raw bindings as `jevmalloc::ffi`, and `jevmalloc::ctl`, a
-  typed wrapper over `jemalloc`'s control and introspection API (the
-  `mallctl*()` family and the _MALLCTL NAMESPACE_).
+  compact, opinionated wrapper over the MIB form of `jemalloc`'s control and
+  introspection API.
 
 ## Usage
 
@@ -43,6 +43,49 @@ static GLOBAL: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 
 And that's it! Once you've defined this `static` then jemalloc will be used for
 all allocations requested by Rust code in the same program.
+
+## Control interface
+
+`jevmalloc::ctl` contains the allocator controls used by Tuwunel rather than a
+generated mirror of jemalloc's entire namespace. Built-in keys are cached
+process-wide after translation, and every subsequent control access uses
+`mallctlbymib`:
+
+```rust
+use jevmalloc::ctl;
+
+fn main() -> Result<(), ctl::Error> {
+    let arena = ctl::this_thread::arena_id()?;
+    let decay = ctl::this_thread::get_muzzy_decay()?;
+    ctl::decay(arena)?;
+    let epoch = ctl::refresh_epoch()?;
+
+    println!("muzzy decay: {decay} ms, refreshed epoch: {epoch}");
+    Ok(())
+}
+```
+
+Thread arena controls resolve an `arena.0.*` template and replace the numeric
+arena component with `thread.arena`. The top-level reclamation functions accept
+either an arena identifier or `None`; `None` uses jemalloc's value `4096` for
+all arenas. Decay setters treat `None` differently by updating the defaults for
+arenas created later.
+
+Epoch refresh is explicit. Ordinary configuration and thread queries read live
+state and do not force a process-wide statistics refresh. With the `stats`
+feature, `ctl::this_thread::ThreadCounters` provides repeated direct reads of
+the calling thread's allocation counters without exposing them as immutable
+static references.
+
+`ctl::raw` resolves ad hoc names and exposes unsafe generic MIB reads, writes,
+exchanges, and commands. Value operations require the Rust type to match the
+selected C control exactly, while commands require the caller to uphold their
+semantic preconditions. Prefer the safe curated functions when one exists.
+
+Profiling controls are present with the `profiling` feature. Compiling that
+support does not activate profiling; jemalloc must also start with `prof:true`
+in its allocator configuration. Counter handles, peak controls, and mutex
+statistics resets are present with the `stats` feature.
 
 ## Symbol prefixing
 

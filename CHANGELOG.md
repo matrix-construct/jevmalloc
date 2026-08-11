@@ -1,9 +1,15 @@
 # Unreleased
 
-- Remove the typed `ctl` option surface (`arenas`, `config`, `opt`,
-  `profiling`, `stats`, `stats_print`, `thread`, and the `version`, `epoch`,
-  and background-thread options); `ctl::raw`, the key types, and the error
-  type remain.
+- Replace the generated TikV-style `ctl` option tree with a compact MIB-only
+  interface for the arena, thread, profiling, epoch, and mutex-statistics
+  controls used by Tuwunel. Built-in MIBs use process-wide caches.
+- Make generic raw MIB operations explicitly unsafe, preserve numeric errno
+  values, validate ad hoc names, require exact value sizes, and expose command
+  preconditions at the safety boundary.
+- Make statistics refresh explicit through `refresh_epoch`; ordinary control
+  reads no longer refresh every arena. Add a thread-confined direct counter
+  handle instead of exposing allocator-mutated counters through static shared
+  references.
 - Update vendored `jemalloc` to 5.3.1, a 396-commit catch-up over 5.3.0. The
   checked-in `configure` was regenerated from the new `configure.ac`; the option
   set is purely additive, so no build glue changed.

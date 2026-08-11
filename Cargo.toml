@@ -17,6 +17,7 @@ repository = "https://github.com/matrix-construct/jevmalloc"
 version = "0.0.0+5.3.1-1-g3a02c75e04e4286f03e931926bb3b322a769bd2c"
 
 [workspace.dependencies]
+arrayvec = { version = "0", default-features = false }
 cc = "1"
 jevmalloc = { version = "0.0.0", path = "jevmalloc", default-features = false }
 jevmalloc-sys = { version = "0.0.0", path = "jevmalloc-sys", default-features = false }
