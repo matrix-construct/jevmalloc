@@ -510,7 +510,8 @@ where
 ///
 /// Panics if Cargo did not provide a Unicode `TARGET` environment variable.
 fn read_and_watch_env(name: &str) -> Result<String, env::VarError> {
-	read_and_watch_env_impl(name, |n| env::var(n).ok()).ok_or(env::VarError::NotPresent)
+	read_and_watch_env_impl(name, |n| env::var(n).ok().filter(|v| !v.is_empty()))
+		.ok_or(env::VarError::NotPresent)
 }
 
 /// Reads a watched environment variable as an operating-system string.
