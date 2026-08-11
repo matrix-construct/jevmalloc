@@ -171,6 +171,7 @@ pub fn percpu_arenas() -> Result<&'static str> {
 /// Query failures produce `false` because this convenience predicate treats an
 /// unavailable mode as disabled.
 #[must_use]
+#[inline]
 pub fn is_affine_arena() -> bool {
 	percpu_arenas().is_ok_and(|mode| matches!(mode, "percpu" | "phycpu"))
 }
@@ -179,15 +180,18 @@ pub fn is_affine_arena() -> bool {
 ///
 /// Query failures produce `false`.
 #[must_use]
+#[inline]
 pub fn is_percpu_arena() -> bool { percpu_arenas().is_ok_and(|mode| mode == "percpu") }
 
 /// Returns whether jemalloc assigns arenas per physical CPU.
 ///
 /// Query failures produce `false`.
 #[must_use]
+#[inline]
 pub fn is_phycpu_arena() -> bool { percpu_arenas().is_ok_and(|mode| mode == "phycpu") }
 
 /// Invokes an arena command after substituting an arena identifier.
+#[inline]
 pub(super) fn notify_by_arena(id: Option<usize>, mut key: Key) -> Result {
 	key = select_arena(id, key);
 
@@ -198,6 +202,7 @@ pub(super) fn notify_by_arena(id: Option<usize>, mut key: Key) -> Result {
 }
 
 /// Updates a decay control after substituting an arena identifier.
+#[inline]
 pub(super) fn set_by_arena(id: Option<usize>, mut key: Key, value: isize) -> Result<isize> {
 	key = select_arena(id, key);
 
@@ -208,6 +213,7 @@ pub(super) fn set_by_arena(id: Option<usize>, mut key: Key, value: isize) -> Res
 }
 
 /// Reads a decay control after substituting an arena identifier.
+#[inline]
 pub(super) fn get_by_arena(id: Option<usize>, mut key: Key) -> Result<isize> {
 	key = select_arena(id, key);
 
@@ -218,6 +224,7 @@ pub(super) fn get_by_arena(id: Option<usize>, mut key: Key) -> Result<isize> {
 }
 
 /// Substitutes an explicit arena or the documented all-arenas sentinel.
+#[inline]
 fn select_arena(id: Option<usize>, mut key: Key) -> Key {
 	key[1] = id.unwrap_or(ALL_ARENAS);
 	key

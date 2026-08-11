@@ -58,6 +58,7 @@ impl Cache {
 /// Defines one process-wide cache and accessor for a fixed control name.
 macro_rules! define_key {
 	($accessor:ident, $name:literal) => {
+		#[inline]
 		#[doc = concat!("Returns the cached MIB for `", $name, "`.")]
 		pub(super) fn $accessor() -> Result<Key> {
 			static KEY: Cache = Cache::new();

@@ -5,9 +5,9 @@
 //! semantic preconditions and effects of a command.
 //! Prefer the typed functions in the parent module whenever one exists.
 
-use libc::{c_char, c_void, size_t};
+use libc::{c_char, c_int, c_void, size_t};
 
-use super::{Error, KEY_SEGS, Key, NAME_MAX, Result, error::cvt};
+use super::{Error, KEY_SEGS, Key, NAME_MAX, Result};
 use crate::{
 	ffi,
 	std::{
@@ -25,6 +25,7 @@ use crate::{
 /// # Errors
 ///
 /// Returns an error if the name is invalid or jemalloc does not recognize it.
+#[inline]
 pub fn mibs(name: &str) -> Result<Key> {
 	let bytes = name.as_bytes();
 	let segments = name.split('.').count();
@@ -54,7 +55,8 @@ pub fn mibs(name: &str) -> Result<Key> {
 		)
 	};
 
-	cvt(status)?;
+	into_result(status)?;
+
 	if key_len != segments || key_len > key.capacity() {
 		return Err(Error::invalid_argument());
 	}
@@ -90,10 +92,10 @@ pub fn mibs(name: &str) -> Result<Key> {
 /// through this function.
 pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 	let expected = size_of::<T>();
-	assert!(expected > 0, "use notify for a no-value control operation");
-
-	let mut value = MaybeUninit::<T>::uninit();
 	let mut value_len = expected;
+	let mut value = MaybeUninit::<T>::uninit();
+
+	debug_assert!(expected > 0, "use notify for a no-value control operation");
 
 	// SAFETY: the caller supplies an exact readable MIB and the control's valid
 	// C output representation as `T`. The key, output, and length storage are
@@ -109,7 +111,8 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 		)
 	};
 
-	cvt(status)?;
+	into_result(status)?;
+
 	assert_eq!(value_len, expected, "jemalloc returned an unexpected control value size");
 
 	// SAFETY: successful completion and the caller's validity guarantee mean
@@ -135,7 +138,8 @@ pub unsafe fn get<T: Copy>(key: &Key) -> Result<T> {
 /// for which jemalloc retains the pointer.
 pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 	let value_len = size_of::<T>();
-	assert!(value_len > 0, "use notify for a no-value control operation");
+
+	debug_assert!(value_len > 0, "use notify for a no-value control operation");
 
 	// SAFETY: the caller supplies an exact writable MIB and its exact C input
 	// type. `value` is aligned, readable, and live for the call, and jemalloc
@@ -152,7 +156,7 @@ pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 		)
 	};
 
-	cvt(status)
+	into_result(status)
 }
 
 /// Supplies a new value to `key` and returns the control-defined output.
@@ -180,9 +184,10 @@ pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 /// requirements.
 pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 	let expected = size_of::<T>();
-	assert!(expected > 0, "use notify for a no-value control operation");
-	let mut output = MaybeUninit::<T>::uninit();
 	let mut output_len = expected;
+	let mut output = MaybeUninit::<T>::uninit();
+
+	debug_assert!(expected > 0, "use notify for a no-value control operation");
 
 	// SAFETY: the caller supplies an exact read-write MIB and its valid C type.
 	// The disjoint storage is aligned and live for the call, and jemalloc treats
@@ -199,7 +204,8 @@ pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 		)
 	};
 
-	cvt(status)?;
+	into_result(status)?;
+
 	assert_eq!(output_len, expected, "jemalloc returned an unexpected control value size");
 
 	// SAFETY: successful completion and the caller's validity guarantee mean
@@ -222,6 +228,7 @@ pub unsafe fn xchg<T: Copy>(key: &Key, value: &T) -> Result<T> {
 /// pointer to be null and every length to be zero. The caller must uphold its
 /// semantic preconditions and account for every side effect. Some commands can
 /// destroy arenas or invalidate allocator state that safe Rust still relies on.
+#[inline]
 pub unsafe fn notify(key: &Key) -> Result {
 	// SAFETY: the caller supplies an exact no-value command whose contract
 	// permits null value pointers and zero lengths. The key remains live.
@@ -229,7 +236,16 @@ pub unsafe fn notify(key: &Key) -> Result {
 		ffi::mallctlbymib(key.as_ptr(), key.len(), null_mut(), null_mut(), null_mut(), 0)
 	};
 
-	cvt(status)
+	into_result(status)
+}
+
+/// Converts a jemalloc return status into a control result.
+#[inline]
+fn into_result(code: c_int) -> Result {
+	match code {
+		| 0 => Ok(()),
+		| code => Err(Error::from_code(code)),
+	}
 }
 
 #[cfg(test)]

@@ -2,7 +2,6 @@
 
 use libc::c_int;
 
-use super::Result;
 use crate::std::{error, fmt, num::NonZeroI32};
 
 /// A nonzero status returned by jemalloc's control interface.
@@ -17,21 +16,26 @@ pub struct Error(NonZeroI32);
 impl Error {
 	/// Returns the numeric errno value.
 	#[must_use]
+	#[inline]
 	pub const fn code(self) -> c_int { self.0.get() }
 
 	/// Reports whether this error has the supplied errno value.
 	#[must_use]
+	#[inline]
 	pub const fn is(self, code: c_int) -> bool { self.code() == code }
 
 	/// Constructs an error from a status known to be nonzero.
+	#[inline]
 	pub(super) fn from_code(code: c_int) -> Self {
 		Self(NonZeroI32::new(code).expect("jemalloc error status must be nonzero"))
 	}
 
 	/// Constructs the wrapper's invalid-argument error.
+	#[inline]
 	pub(super) fn invalid_argument() -> Self { Self::from_code(libc::EINVAL) }
 
 	/// Constructs the wrapper's invalid-pointer error.
+	#[inline]
 	pub(super) fn bad_address() -> Self { Self::from_code(libc::EFAULT) }
 
 	/// Returns the standard description for a recognized status.
@@ -51,24 +55,18 @@ impl Error {
 
 impl error::Error for Error {}
 
+impl fmt::Debug for Error {
+	#[inline]
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { fmt::Display::fmt(self, f) }
+}
+
 impl fmt::Display for Error {
+	#[inline(never)]
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self.description() {
 			| Some(description) => write!(f, "{description} (errno {})", self.code()),
 			| None => write!(f, "Unknown jemalloc error (errno {})", self.code()),
 		}
-	}
-}
-
-impl fmt::Debug for Error {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { fmt::Display::fmt(self, f) }
-}
-
-/// Converts a jemalloc return status into a control result.
-pub(super) fn cvt(code: c_int) -> Result {
-	match code {
-		| 0 => Ok(()),
-		| code => Err(Error::from_code(code)),
 	}
 }
 
@@ -80,7 +78,7 @@ mod tests {
 
 	use rust_std::string::ToString;
 
-	use super::*;
+	use super::{super::Result, *};
 
 	/// Confirms that the nonzero code preserves the `Result` niche.
 	#[test]
