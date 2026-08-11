@@ -1,6 +1,6 @@
 //! Statistics snapshot and reset controls.
 
-use super::{Result, key, raw};
+use crate::ctl::{Result, key, raw};
 
 /// Returns the current jemalloc statistics epoch without refreshing it.
 ///

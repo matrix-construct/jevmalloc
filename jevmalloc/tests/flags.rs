@@ -15,7 +15,7 @@ use core::{
 };
 
 use jevmalloc::{
-	Jemalloc, QUANTUM, adjust_layout, ctl,
+	Jemalloc, QUANTUM, adjust_layout, arenas,
 	ffi::{MALLOCX_ALIGN, nallocx},
 	layout_flags,
 };
@@ -385,7 +385,7 @@ fn dropping_the_alignment_keeps_the_size_class() {
 /// underalignment.
 #[test]
 fn jemalloc_quantum_covers_the_rust_quantum() {
-	let quantum = ctl::arenas::quantum().unwrap();
+	let quantum = arenas::quantum().unwrap();
 
 	assert!(quantum >= QUANTUM, "jemalloc quantum {quantum} is below the assumed {QUANTUM}");
 }

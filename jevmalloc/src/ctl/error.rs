@@ -24,19 +24,19 @@ impl Error {
 	#[inline]
 	pub const fn is(self, code: c_int) -> bool { self.code() == code }
 
+	/// Constructs the wrapper's invalid-argument error.
+	#[inline]
+	pub(crate) fn invalid_argument() -> Self { Self::from_code(libc::EINVAL) }
+
+	/// Constructs the wrapper's invalid-pointer error.
+	#[inline]
+	pub(crate) fn bad_address() -> Self { Self::from_code(libc::EFAULT) }
+
 	/// Constructs an error from a status known to be nonzero.
 	#[inline]
 	pub(super) fn from_code(code: c_int) -> Self {
 		Self(NonZeroI32::new(code).expect("jemalloc error status must be nonzero"))
 	}
-
-	/// Constructs the wrapper's invalid-argument error.
-	#[inline]
-	pub(super) fn invalid_argument() -> Self { Self::from_code(libc::EINVAL) }
-
-	/// Constructs the wrapper's invalid-pointer error.
-	#[inline]
-	pub(super) fn bad_address() -> Self { Self::from_code(libc::EFAULT) }
 
 	/// Returns the standard description for a recognized status.
 	fn description(self) -> Option<&'static str> {

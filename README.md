@@ -20,9 +20,8 @@ Two crates, and the C source they vendor:
   see [`jevmalloc-sys/update_jemalloc.md`](jevmalloc-sys/update_jemalloc.md) for
   how to move it.
 * `jevmalloc`: provides the `Jemalloc` type implementing `GlobalAlloc`, a
-  re-export of the raw bindings as `jevmalloc::ffi`, and `jevmalloc::ctl`, a
-  compact, opinionated wrapper over the MIB form of `jemalloc`'s control and
-  introspection API.
+  re-export of the raw bindings as `jevmalloc::ffi`, typed allocator operations
+  grouped by scope, and low-level MIB access under `jevmalloc::ctl`.
 
 ## Usage
 
@@ -44,28 +43,27 @@ static GLOBAL: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 And that's it! Once you've defined this `static` then jemalloc will be used for
 all allocations requested by Rust code in the same program.
 
-## Control interface
+## Allocator controls
 
-`jevmalloc::ctl` contains the allocator controls used by Tuwunel rather than a
-generated mirror of jemalloc's entire namespace. Built-in keys are cached
-process-wide after translation, and every subsequent control access uses
-`mallctlbymib`:
+The typed allocator controls are grouped by what they operate on rather than
+mirroring jemalloc's entire namespace. Built-in keys are cached process-wide
+after translation, and every subsequent control access uses `mallctlbymib`:
 
 ```rust
-use jevmalloc::ctl;
+use jevmalloc::{Arena, ctl, stats};
 
 fn main() -> Result<(), ctl::Error> {
-    let arena = ctl::Arena::current()?;
+    let arena = Arena::current()?;
     let decay = arena.muzzy_decay()?;
     arena.decay()?;
-    let epoch = ctl::refresh_epoch()?;
+    let epoch = stats::refresh_epoch()?;
 
     println!("muzzy decay: {decay} ms, refreshed epoch: {epoch}");
     Ok(())
 }
 ```
 
-`ctl::Arena` represents one borrowed or explicitly created arena and exposes its
+`Arena` represents one borrowed or explicitly created arena and exposes its
 reclamation, decay, name, DSS, retained-growth, extent-hook, reset, and destroy
 controls as methods. An arena created with `Arena::create` owns its lifecycle
 and performs a best effort destroy when dropped. Allocation routing, reset,
@@ -75,26 +73,29 @@ Constructing an unpinned handle from a raw arena index is likewise unsafe
 because the caller must synchronize it with destruction and index recycling.
 
 Allocator-wide queries, future-arena defaults, and the all-arenas reclamation
-commands live under `ctl::arenas`. Thread controls resolve an `arena.0.*`
-template and replace the numeric component with `thread.arena` before delegating
-to the same instance methods.
+commands live under `jevmalloc::arenas`. Thread controls live under
+`jevmalloc::this_thread`; arena operations resolve an `arena.0.*` template and
+replace the numeric component with `thread.arena` before delegating to the same
+instance methods.
 
 Epoch refresh is explicit. Ordinary configuration and thread queries read live
 state and do not force a process-wide statistics refresh. With the `stats`
-feature, `ctl::this_thread::ThreadCounters` provides repeated direct reads of
-the calling thread's allocation counters without exposing them as immutable
+feature, `jevmalloc::this_thread::ThreadCounters` provides repeated direct reads
+of the calling thread's allocation counters without exposing them as immutable
 static references.
 
-`ctl::raw` resolves ad hoc names and exposes unsafe generic MIB reads, writes,
-mixed-type updates, exchanges, and commands. Value operations require the Rust
-type to match the selected C control exactly, while commands require the caller
-to uphold their semantic preconditions. Prefer the curated object methods when
-one exists.
+`jevmalloc::ctl::raw` resolves ad hoc names and exposes unsafe generic MIB
+reads, writes, mixed-type updates, exchanges, and commands. Value operations
+require the Rust type to match the selected C control exactly, while commands
+require the caller to uphold their semantic preconditions. Prefer a typed
+crate-level control when one exists.
 
-Profiling controls are present with the `profiling` feature. Compiling that
-support does not activate profiling; jemalloc must also start with `prof:true`
-in its allocator configuration. Counter handles, peak controls, and mutex
-statistics resets are present with the `stats` feature.
+Profiling controls live under `jevmalloc::profiling` with the `profiling`
+feature. Compiling that support does not activate profiling; jemalloc must also
+start with `prof:true` in its allocator configuration. Epoch operations live
+under `jevmalloc::stats`. Counter handles and peak controls live under
+`jevmalloc::this_thread`, and mutex-statistics reset is present under
+`jevmalloc::stats` with the `stats` feature.
 
 ## Symbol prefixing
 
@@ -138,7 +139,7 @@ passes to `configure`. The default set is `cache_oblivious`,
 `initial_exec_tls` and `unprefixed_malloc_on_supported_platforms`.
 
 `jevmalloc` adds `global_hooks`, which calls a user-supplied hook (see
-`jevmalloc::global_alloc::hook`) before entering `jemalloc` on each
+`jevmalloc::global::hook`) before entering `jemalloc` on each
 `GlobalAlloc` operation.
 
 ## Testing

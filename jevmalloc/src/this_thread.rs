@@ -9,7 +9,10 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use libc::c_uint;
 
-use super::{Arena, Error, Result, arena, key, raw, value};
+use crate::{
+	Arena, arena,
+	ctl::{Error, Result, key, raw, value},
+};
 
 /// Reclaims unused pages from the calling thread's arena.
 ///

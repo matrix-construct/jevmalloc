@@ -4,7 +4,10 @@ use core::ffi::CStr;
 
 use libc::{c_char, c_uint};
 
-use super::{Error, Key, Result, arena::Dss, key, raw};
+use crate::{
+	arena::Dss,
+	ctl::{Error, Key, Result, key, raw},
+};
 
 /// Jemalloc's documented MIB sentinel for all arenas.
 const ALL_ARENAS: usize = 4096;

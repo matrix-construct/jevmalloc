@@ -25,8 +25,10 @@ pub use self::{
 	extent_hooks::ExtentHooks,
 	name::{ARENA_NAME_LEN, ArenaName},
 };
-use super::{Error, Key, Result, key, raw, this_thread};
-use crate::ffi;
+use crate::{
+	ctl::{Error, Key, Result, key, raw},
+	ffi, this_thread,
+};
 
 /// Exclusive upper bound for ordinary jemalloc arena indices.
 ///
@@ -289,7 +291,7 @@ impl Arena {
 	/// Applies decay-based purging and then purges all remaining unused dirty
 	/// pages.
 	///
-	/// This is the instance equivalent of [`crate::ctl::arenas::trim`].
+	/// This is the instance equivalent of [`crate::arenas::trim`].
 	///
 	/// # Errors
 	///

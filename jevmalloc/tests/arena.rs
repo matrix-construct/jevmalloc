@@ -8,11 +8,7 @@ use core::{
 };
 use std::sync::Mutex;
 
-use jevmalloc::{
-	Jemalloc,
-	ctl::{self, Arena, ExtentHooks},
-	ffi,
-};
+use jevmalloc::{Arena, ExtentHooks, Jemalloc, arena, ctl, ffi, this_thread};
 #[cfg(target_env = "msvc")]
 use libc::c_int;
 use libc::{c_uint, c_void, size_t};
@@ -125,20 +121,21 @@ unsafe extern "C" fn forward_destroy(
 fn lifecycle_and_controls() {
 	let _guard = CONTROL.lock().unwrap();
 	let mut arena = Arena::create().unwrap();
-
 	assert!(arena.is_owned());
-	assert!(arena.index() < ctl::ARENA_INDEX_LIMIT);
+	assert!(arena.index() < arena::ARENA_INDEX_LIMIT);
 	assert_eq!(arena.flags(), ffi::MALLOCX_ARENA(arena.index()));
 
 	arena
 		.set_name(c"jevmalloc arena lifecycle")
 		.unwrap();
+
 	assert_eq!(arena.name().unwrap().to_str().unwrap(), "jevmalloc arena lifecycle");
 
 	arena
 		.set_name(c"abcdefghijklmnopqrstuvwxyz0123456789")
 		.unwrap();
-	assert_eq!(arena.name().unwrap().as_bytes().len(), ctl::ARENA_NAME_LEN - 1);
+
+	assert_eq!(arena.name().unwrap().as_bytes().len(), arena::ARENA_NAME_LEN - 1);
 
 	let dss = arena.dss().unwrap();
 	assert_eq!(arena.set_dss(dss).unwrap(), dss);
@@ -214,7 +211,7 @@ fn destruction_failure_retains_owner() {
 	// any allocation is performed.
 	let restored = unsafe { previous.set_current() }.unwrap();
 	assert_eq!(restored.index(), failure.arena().index());
-	ctl::this_thread::flush().unwrap();
+	this_thread::flush().unwrap();
 
 	let (error, arena) = failure.into_parts();
 	assert!(error.is(libc::EFAULT));

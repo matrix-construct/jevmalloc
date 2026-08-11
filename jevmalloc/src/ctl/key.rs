@@ -25,7 +25,7 @@ pub const KEY_SEGS: usize = 8;
 macro_rules! define_key {
 	($accessor:ident, $name:literal) => {
 		#[doc = concat!("Returns the cached MIB for `", $name, "`.")]
-		pub(super) fn $accessor() -> Result<Key> {
+		pub(crate) fn $accessor() -> Result<Key> {
 			static KEY: Cache = Cache::new();
 			KEY.get($name)
 		}

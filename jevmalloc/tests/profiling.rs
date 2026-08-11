@@ -2,7 +2,10 @@
 
 #![cfg(test)]
 
-use jevmalloc::{Jemalloc, ctl};
+use jevmalloc::{
+	Jemalloc, ctl, is_prof_enabled, prof_enable, prof_gdump, prof_interval, prof_reset,
+	this_thread,
+};
 
 /// Jemalloc's C `bool` representation when built by cl.exe.
 #[cfg(target_env = "msvc")]
@@ -49,8 +52,8 @@ static ALLOC: Jemalloc = Jemalloc;
 /// Checks global and current-thread profiling state exchanges.
 #[test]
 fn profiling_state_round_trips() {
-	let global = ctl::is_prof_enabled().unwrap();
-	let thread = ctl::this_thread::is_prof_enabled().unwrap();
+	let global = is_prof_enabled().unwrap();
+	let thread = this_thread::is_prof_enabled().unwrap();
 	let gdump_key = ctl::raw::mibs("prof.gdump").unwrap();
 
 	// SAFETY: this is the complete `prof.gdump` MIB, and `CBool` matches the
@@ -58,12 +61,12 @@ fn profiling_state_round_trips() {
 	let gdump = unsafe { ctl::raw::get::<CBool>(&gdump_key) }.unwrap();
 	let gdump = gdump != CBool::default();
 
-	assert_eq!(ctl::prof_enable(global).unwrap(), global);
-	assert_eq!(ctl::prof_gdump(gdump).unwrap(), gdump);
-	assert_eq!(ctl::this_thread::prof_enable(thread).unwrap(), thread);
-	let _interval = ctl::prof_interval().unwrap();
+	assert_eq!(prof_enable(global).unwrap(), global);
+	assert_eq!(prof_gdump(gdump).unwrap(), gdump);
+	assert_eq!(this_thread::prof_enable(thread).unwrap(), thread);
+	let _interval = prof_interval().unwrap();
 }
 
 /// Checks the profile reset command with its optional input omitted.
 #[test]
-fn profiling_reset_uses_the_current_sample_rate() { ctl::prof_reset().unwrap(); }
+fn profiling_reset_uses_the_current_sample_rate() { prof_reset().unwrap(); }

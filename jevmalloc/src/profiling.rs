@@ -5,7 +5,7 @@
 //! enables `prof`. Controls that activate, reset, or dump profiling can return
 //! `ENOENT` while that runtime option is off.
 
-use super::{Result, key, raw, value};
+use crate::ctl::{Result, key, raw, value};
 
 /// Resets accumulated heap-profile statistics without changing the sample rate.
 ///

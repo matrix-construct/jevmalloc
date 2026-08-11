@@ -3,7 +3,7 @@
 //! [`mibs`] safely resolves a control name. The generic operations are unsafe
 //! because jemalloc's numeric MIB encodes neither its C value type nor the
 //! semantic preconditions and effects of a command.
-//! Prefer the typed functions in the parent module whenever one exists.
+//! Prefer the crate's typed control functions whenever one exists.
 
 use core::{
 	mem::{MaybeUninit, size_of},

@@ -48,11 +48,11 @@ name = "ffi"
 required-features = ["stats"]
 
 [[test]]
-name = "ctl_profiling"
+name = "profiling"
 required-features = ["profiling"]
 
 [[test]]
-name = "ctl_stats"
+name = "stats"
 required-features = ["stats"]
 
 [lints]

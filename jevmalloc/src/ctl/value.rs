@@ -17,13 +17,13 @@ type CBool = c_int;
 type CBool = bool;
 
 /// Reads a control whose C output type is `bool`.
-pub(super) fn get_bool(key: &Key) -> Result<bool> {
+pub(crate) fn get_bool(key: &Key) -> Result<bool> {
 	// SAFETY: callers select a control with the platform's `CBool` output type.
 	unsafe { raw::get::<CBool>(key) }.map(decode_bool)
 }
 
 /// Exchanges a control whose C input and output types are both `bool`.
-pub(super) fn xchg_bool(key: &Key, value: bool) -> Result<bool> {
+pub(crate) fn xchg_bool(key: &Key, value: bool) -> Result<bool> {
 	let value = encode_bool(value);
 
 	// SAFETY: callers select a control with `CBool` input and output types.

@@ -11,17 +11,18 @@
 //! A Rust global allocator backed by jemalloc.
 //!
 //! [`Jemalloc`] implements [`GlobalAlloc`] and can service the process-wide
-//! `#[global_allocator]` slot. The [`ctl`] module wraps jemalloc's control and
-//! introspection API with a compact MIB-only surface, while [`ffi`] re-exports
-//! the underlying C bindings.
+//! `#[global_allocator]` slot. Typed allocator operations are grouped by scope
+//! in [`Arena`], [`arenas`], [`stats`], and [`this_thread`]. The [`ctl`] module
+//! exposes MIB-based control-interface primitives, while [`ffi`] re-exports the
+//! underlying C bindings.
 //!
 //! ```
 //! #[global_allocator]
 //! static ALLOC: jevmalloc::Jemalloc = jevmalloc::Jemalloc;
 //!
 //! # fn main() -> Result<(), jevmalloc::ctl::Error> {
-//! let quantum = jevmalloc::ctl::arenas::quantum()?;
-//! let epoch = jevmalloc::ctl::refresh_epoch()?;
+//! let quantum = jevmalloc::arenas::quantum()?;
+//! let epoch = jevmalloc::stats::refresh_epoch()?;
 //! assert!(quantum > 0);
 //! assert!(epoch > 0);
 //! # Ok(())
@@ -32,8 +33,14 @@
 
 #![no_std]
 
+pub mod arena;
+pub mod arenas;
 pub mod ctl;
 pub mod global;
+#[cfg(feature = "profiling")]
+pub mod profiling;
+pub mod stats;
+pub mod this_thread;
 
 /// Re-exports the raw jemalloc bindings.
 ///
@@ -41,9 +48,18 @@ pub mod global;
 /// helpers, and the foreign-function types. Callers must uphold the safety
 /// contracts documented there.
 pub use ::jevmalloc_sys as ffi;
+pub use arena::{
+	ARENA_INDEX_LIMIT, ARENA_NAME_LEN, Arena, ArenaDestroyError, ArenaName, Dss, ExtentHooks,
+};
 
 /// Re-exports the allocator layout utilities.
 pub use self::global::layout::*;
+#[cfg(feature = "profiling")]
+pub use self::profiling::{
+	is_prof_enabled, prof_dump, prof_enable, prof_gdump, prof_interval, prof_reset,
+};
+#[cfg(feature = "stats")]
+pub use self::stats::stats_reset;
 
 /// Selects jemalloc as a Rust global allocator.
 ///
@@ -62,3 +78,20 @@ pub struct Jemalloc;
 #[cfg(test)]
 #[global_allocator]
 static ALLOCATOR: Jemalloc = Jemalloc;
+
+/// Enables or disables jemalloc's background purge workers.
+///
+/// Enabling creates workers on demand. Disabling waits for existing workers to
+/// terminate before returning. The previous setting is returned. If jemalloc
+/// reports a worker-management failure, the requested setting can still have
+/// taken effect. A child process starts with workers disabled after `fork`,
+/// regardless of the parent setting. The control exists only on selected
+/// pthread-based platforms.
+///
+/// # Errors
+///
+/// Returns an error if jemalloc rejects the read or update.
+pub fn background_thread_enable(enable: bool) -> self::ctl::Result<bool> {
+	let key = self::ctl::key::background_thread()?;
+	self::ctl::value::xchg_bool(&key, enable)
+}

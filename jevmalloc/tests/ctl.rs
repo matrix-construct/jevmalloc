@@ -1,11 +1,11 @@
-//! Exercises the MIB-only control wrapper through its public surface.
+//! Exercises low-level MIB access and typed allocator controls.
 
 #![cfg(test)]
 
 use core::alloc::{GlobalAlloc, Layout};
 use std::sync::Mutex;
 
-use jevmalloc::{Jemalloc, ctl};
+use jevmalloc::{Dss, Jemalloc, arenas, ctl, stats, this_thread};
 
 /// Jemalloc's C `bool` representation when built by cl.exe.
 #[cfg(target_env = "msvc")]
@@ -64,9 +64,9 @@ fn raw_mib_access() {
 #[test]
 fn epoch_refresh_is_explicit() {
 	let _guard = CONTROL.lock().unwrap();
-	let before = ctl::epoch().unwrap();
-	let refreshed = ctl::refresh_epoch().unwrap();
-	let after = ctl::epoch().unwrap();
+	let before = stats::epoch().unwrap();
+	let refreshed = stats::refresh_epoch().unwrap();
+	let after = stats::epoch().unwrap();
 
 	assert!(refreshed > before);
 	assert_eq!(after, refreshed);
@@ -75,23 +75,25 @@ fn epoch_refresh_is_explicit() {
 /// Checks the global arena queries and the documented affinity predicates.
 #[test]
 fn arena_queries_are_consistent() {
-	assert!(ctl::arenas::limit().unwrap() > 0);
-	assert!(ctl::arenas::quantum().unwrap() > 0);
+	assert!(arenas::limit().unwrap() > 0);
+	assert!(arenas::quantum().unwrap() > 0);
 
-	let mode = ctl::arenas::percpu_mode().unwrap();
+	let mode = arenas::percpu_mode().unwrap();
 	assert!(matches!(mode, "disabled" | "percpu" | "phycpu"));
-	assert_eq!(ctl::arenas::is_percpu(), mode == "percpu");
-	assert_eq!(ctl::arenas::is_phycpu(), mode == "phycpu");
-	assert_eq!(ctl::arenas::is_affine(), mode != "disabled");
+	assert_eq!(arenas::is_percpu(), mode == "percpu");
+	assert_eq!(arenas::is_phycpu(), mode == "phycpu");
+	assert_eq!(arenas::is_affine(), mode != "disabled");
 }
 
-/// Checks both all-arena reclamation commands through the migrated entry point.
+/// Checks both all-arena reclamation commands through the allocator-wide API.
 #[test]
-fn all_arenas_trim() { ctl::arenas::trim().unwrap(); }
+fn all_arenas_trim() { arenas::trim().unwrap(); }
 
 /// Checks that updating the background setting returns its current value.
 #[test]
 fn background_thread_exchange() {
+	use jevmalloc::background_thread_enable;
+
 	let _guard = CONTROL.lock().unwrap();
 	let key = ctl::raw::mibs("background_thread").unwrap();
 
@@ -99,7 +101,7 @@ fn background_thread_exchange() {
 	// the platform C `bool` representation.
 	let current = unsafe { ctl::raw::get::<CBool>(&key) }.unwrap();
 	let enabled = current != CBool::default();
-	let previous = ctl::background_thread_enable(enabled).unwrap();
+	let previous = background_thread_enable(enabled).unwrap();
 
 	assert_eq!(previous, enabled);
 }
@@ -108,15 +110,15 @@ fn background_thread_exchange() {
 #[test]
 fn future_arena_decay_exchange() {
 	let _guard = CONTROL.lock().unwrap();
-	let muzzy = ctl::arenas::muzzy_decay().unwrap();
-	let dirty = ctl::arenas::dirty_decay().unwrap();
+	let muzzy = arenas::muzzy_decay().unwrap();
+	let dirty = arenas::dirty_decay().unwrap();
 	let other_muzzy = isize::from(muzzy == 0);
 	let other_dirty = isize::from(dirty == 0);
 
-	let previous_muzzy = ctl::arenas::set_muzzy_decay(other_muzzy).unwrap();
-	let replaced_muzzy = ctl::arenas::set_muzzy_decay(muzzy).unwrap();
-	let previous_dirty = ctl::arenas::set_dirty_decay(other_dirty).unwrap();
-	let replaced_dirty = ctl::arenas::set_dirty_decay(dirty).unwrap();
+	let previous_muzzy = arenas::set_muzzy_decay(other_muzzy).unwrap();
+	let replaced_muzzy = arenas::set_muzzy_decay(muzzy).unwrap();
+	let previous_dirty = arenas::set_dirty_decay(other_dirty).unwrap();
+	let replaced_dirty = arenas::set_dirty_decay(dirty).unwrap();
 
 	assert_eq!(previous_muzzy, muzzy);
 	assert_eq!(replaced_muzzy, other_muzzy);
@@ -128,21 +130,21 @@ fn future_arena_decay_exchange() {
 #[test]
 fn future_arena_dss_exchange() {
 	let _guard = CONTROL.lock().unwrap();
-	let current = ctl::arenas::dss().unwrap();
+	let current = arenas::dss().unwrap();
 	let other = match current {
-		| ctl::Dss::Disabled => ctl::Dss::Secondary,
-		| ctl::Dss::Primary | ctl::Dss::Secondary => ctl::Dss::Disabled,
+		| Dss::Disabled => Dss::Secondary,
+		| Dss::Primary | Dss::Secondary => Dss::Disabled,
 	};
 
-	match ctl::arenas::set_dss(other) {
+	match arenas::set_dss(other) {
 		| Ok(resulting) => {
-			let restored = ctl::arenas::set_dss(current).unwrap();
+			let restored = arenas::set_dss(current).unwrap();
 
 			assert_eq!(resulting, other);
 			assert_eq!(restored, current);
 		},
 		| Err(error) => {
-			assert_eq!(current, ctl::Dss::Disabled);
+			assert_eq!(current, Dss::Disabled);
 			assert!(error.is(libc::EFAULT));
 		},
 	}
@@ -151,25 +153,25 @@ fn future_arena_dss_exchange() {
 /// Checks current-thread MIB substitution and scalar exchanges.
 #[test]
 fn current_thread_controls() {
-	let arena = ctl::this_thread::arena_id().unwrap();
-	assert!(arena < ctl::arenas::limit().unwrap());
-	if !ctl::arenas::is_affine() {
+	let arena = this_thread::arena_id().unwrap();
+	assert!(arena < arenas::limit().unwrap());
+	if !arenas::is_affine() {
 		// SAFETY: reselecting the current arena changes no allocation lifetime.
-		assert_eq!(unsafe { ctl::this_thread::set_arena(arena) }.unwrap(), arena);
+		assert_eq!(unsafe { this_thread::set_arena(arena) }.unwrap(), arena);
 	}
 
-	let muzzy = ctl::this_thread::get_muzzy_decay().unwrap();
-	let dirty = ctl::this_thread::get_dirty_decay().unwrap();
-	assert_eq!(ctl::this_thread::set_muzzy_decay(muzzy).unwrap(), muzzy);
-	assert_eq!(ctl::this_thread::set_dirty_decay(dirty).unwrap(), dirty);
+	let muzzy = this_thread::get_muzzy_decay().unwrap();
+	let dirty = this_thread::get_dirty_decay().unwrap();
+	assert_eq!(this_thread::set_muzzy_decay(muzzy).unwrap(), muzzy);
+	assert_eq!(this_thread::set_dirty_decay(dirty).unwrap(), dirty);
 
-	let cache = ctl::this_thread::is_cache_enabled().unwrap();
-	assert_eq!(ctl::this_thread::cache_enable(true).unwrap(), cache);
-	ctl::this_thread::flush().unwrap();
+	let cache = this_thread::is_cache_enabled().unwrap();
+	assert_eq!(this_thread::cache_enable(true).unwrap(), cache);
+	this_thread::flush().unwrap();
 	if !cache {
-		assert!(ctl::this_thread::cache_enable(false).unwrap());
+		assert!(this_thread::cache_enable(false).unwrap());
 	}
 
-	ctl::this_thread::trim().unwrap();
-	ctl::this_thread::idle().unwrap();
+	this_thread::trim().unwrap();
+	this_thread::idle().unwrap();
 }
