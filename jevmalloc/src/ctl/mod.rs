@@ -35,6 +35,7 @@ pub use self::{
 		quantum, set_dirty_decay, set_muzzy_decay, trim,
 	},
 	error::Error,
+	key::{KEY_SEGS, Key, NAME_MAX},
 	stats::{epoch, refresh_epoch},
 };
 use super::std;
@@ -44,18 +45,6 @@ use super::std;
 /// A failed operation retains the nonzero status returned by jemalloc. Invalid
 /// names supplied to [`raw::mibs`] are reported as `EINVAL`.
 pub type Result<T = ()> = std::result::Result<T, Error>;
-
-/// A resolved jemalloc Management Information Base key.
-///
-/// Jemalloc currently uses at most seven numeric components. The extra slot
-/// leaves room for compatible namespace growth while keeping every key inline.
-pub type Key = arrayvec::ArrayVec<usize, KEY_SEGS>;
-
-/// Maximum number of bytes in a control name, including its trailing NUL.
-const NAME_MAX: usize = 128;
-
-/// Number of inline numeric components reserved for a MIB key.
-const KEY_SEGS: usize = 8;
 
 /// Enables or disables jemalloc's background purge workers.
 ///

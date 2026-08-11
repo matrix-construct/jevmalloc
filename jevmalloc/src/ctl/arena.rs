@@ -146,7 +146,7 @@ pub fn quantum() -> Result<usize> {
 /// Returns an error if jemalloc rejects the query, returns a null pointer, or
 /// reports a mode outside the documented set.
 pub fn percpu_arenas() -> Result<&'static str> {
-	let key = key::percpu_arena()?;
+	let key = key::opt_percpu_arena()?;
 
 	// SAFETY: the fixed resolver returns the complete `opt.percpu_arena` MIB,
 	// whose C output type is `const char *`.
