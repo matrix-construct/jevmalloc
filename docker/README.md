@@ -104,15 +104,32 @@ meaningful if each cell configures and compiles jemalloc itself.
 `source` is an allowlist of the files that actually feed a build, so editing
 this README, a workflow, or `bake.hcl` invalidates no cargo layer.
 
-The builder is created on first use with a garbage-collection policy that keeps
-build layers for 6 hours under an 8 GB ceiling, about one full matrix, so the
-toolchain layers every leaf references stay warm while the per-leaf ones are
-what gets trimmed. buildkit only reclaims a record
-that is both over the ceiling and older than its keep duration, so a generous
-duration would shield the whole cache, leave the ceiling inert, and grow until
-the disk-pressure valve dumped everything at once. Tune with `layer_max_space`
-and friends; the policy applies at creation, so change it with
-`docker buildx rm jevmalloc` and a re-run.
+The builder is named for the GitHub actor and is shared with Tuwunel, which
+builds on the same machine and addresses it by the same name. One builder means
+one buildkit, one layer cache and one garbage-collection policy across both
+projects rather than two full-fat caches competing for the same disk.
+
+Because it belongs to neither project alone, it is created by an `Init` job
+running `.github/workflows/init.sh`, a verbatim copy of Tuwunel's, before any
+cell starts. That script also carries the reaper that sweeps other actors'
+builders once they have been idle a day, which works only because every
+repository sharing the machine marks itself on every run. Its policy holds
+dependency cache mounts (the cargo registry, rustup downloads) apart from build
+layers, so trimming layers never evicts them, and keeps a warm floor that
+garbage collection will not prune below. Commit-message directives reach it:
+`[ci clean]` discards the builder so it is recreated, `[ci clean nocache]`
+recreates it cold.
+
+buildkit applies a builder's configuration only when the builder is created, so
+the budgets in the `Init` job must match Tuwunel's. Whichever repository runs
+first is the one that decides them, and a disagreement is a policy the machine
+may or may not get. Changing them means deleting the builder, which is what
+`[ci clean]` is for.
+
+A workstation and the GitHub-hosted machines that pull requests build on have no
+`Init` job and no shared disk. There `docker/bake.sh` creates a plain builder
+with no policy at all, which is also why it configures none: `init.sh` stays the
+only thing that can define the shared builder.
 
 ## Machines
 

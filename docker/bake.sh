@@ -67,61 +67,28 @@ set +a
 
 ###############################################################################
 
-# The builder is ours alone. Sharing one with another repository would mean
-# sharing its garbage-collection policy, and the whole point of the policy below
-# is that this cache stays small enough for the ceiling to bind.
-builder_name="${builder_name:-jevmalloc}"
+# One builder per GitHub actor, shared with every other repository built on the
+# same machine. Tuwunel addresses it by the same name, so on the self-hosted
+# pool this resolves to the one builder both projects already use, with one
+# buildkit, one layer cache and one garbage-collection policy between them. A
+# second builder here would be a second full-fat cache competing for the same
+# disk, which is the arrangement this replaced.
+builder_name="${builder_name:-${GITHUB_ACTOR:-jevmalloc}}"
 
-# buildkit only reclaims a record that is over the ceiling *and* older than
-# keepDuration, so a long keepDuration shields the whole cache, the ceiling
-# never binds, and it grows until the disk-pressure rule dumps everything. A
-# short duration on the build layers keeps the shielded set under the ceiling.
-# Cache mounts (apt, the cargo registry, rustup downloads) are small and worth
-# keeping, so they get their own bucket.
-# A full matrix leaves roughly 8 GB of layer records, so the ceiling holds about
-# one run: the toolchain layers every leaf references stay warm, and the per-leaf
-# ones, which have to rebuild on any source change anyway, are what gets trimmed.
-# Deliberately modest, since the shared machine has its own disk pressure.
-layer_keep_duration="${layer_keep_duration:-6h}"
-layer_max_space="${layer_max_space:-8GB}"
-cachemount_keep_duration="${cachemount_keep_duration:-168h}"
-cachemount_max_space="${cachemount_max_space:-2GB}"
-min_free_space="${min_free_space:-16GB}"
-
-# Applied at creation only; `docker buildx rm $builder_name` and re-run to
-# change it.
-buildkitd_config() {
-    cat <<EOF
-[worker.oci]
-  gc = true
-
-  [[worker.oci.gcpolicy]]
-    filters = ["type==exec.cachemount"]
-    keepDuration = "${cachemount_keep_duration}"
-    maxUsedSpace = "${cachemount_max_space}"
-
-  [[worker.oci.gcpolicy]]
-    filters = ["type!=exec.cachemount"]
-    keepDuration = "${layer_keep_duration}"
-    maxUsedSpace = "${layer_max_space}"
-
-  [[worker.oci.gcpolicy]]
-    all = true
-    minFreeSpace = "${min_free_space}"
-EOF
-}
-
+# On CI the builder and its garbage-collection policy are the init job's, from
+# the shared .github/workflows/init.sh, and it exists before any cell runs. This
+# is the fallback for the two cases init does not cover: a workstation, and the
+# ephemeral GitHub-hosted machines that pull requests build on. Neither shares a
+# disk with anything, so neither needs a policy, and deliberately configuring
+# nothing here keeps init.sh the only thing that can define the shared builder.
+#
 # The self-hosted pool is many runner instances against one docker daemon and
-# one buildx state directory, so a first run can have several jobs creating this
-# concurrently. Whoever loses the race just adopts the winner's builder.
+# one buildx state directory, so several jobs can reach this concurrently.
+# Whoever loses the race just adopts the winner's builder.
 if ! docker buildx inspect "$builder_name" >/dev/null 2>&1; then
-    config="$(mktemp)"
-    trap 'rm -f "$config"' EXIT
-    buildkitd_config > "$config"
     docker buildx create \
         --name "$builder_name" \
         --driver docker-container \
-        --config "$config" \
         >/dev/null 2>&1 || true
 fi
 

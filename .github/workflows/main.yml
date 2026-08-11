@@ -65,9 +65,65 @@ permissions:
   contents: read
 
 jobs:
+  # The builder this repository builds on is not its own. The x64 pool is one
+  # machine carrying Tuwunel's CI too, and both repositories address a builder
+  # named for the GitHub actor, so a single buildx builder serves both and its
+  # garbage-collection policy cannot belong to either alone. This job runs
+  # Tuwunel's `.github/workflows/init.sh` verbatim, with the same space budgets:
+  # buildkit applies a builder's config only when the builder is created, so
+  # whichever repository happens to run first decides it, and identical inputs
+  # are the whole of what keeps the two aligned. The script also carries the
+  # cross-repository reaper that sweeps idle actors' builders, which only works
+  # if every repository sharing the machine marks itself on every run.
+  #
+  # Pull requests are excluded. They build on ephemeral GitHub-hosted machines
+  # where there is no shared builder to maintain; docker/bake.sh creates a
+  # throwaway one there instead.
+  init:
+    name: Init
+    if: github.event_name != 'pull_request'
+    runs-on: ${{matrix.runner}}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: true
+      matrix:
+        runner: ${{fromJSON(vars.RUNNERS || '["het", "aws"]')}}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Keep these budgets identical to Tuwunel's. They are runner-keyed JSON
+      # maps read by init.sh; a value that disagrees with the other repository's
+      # is a policy this machine may or may not get, depending on which run
+      # created the builder.
+      - name: Initialize Builder
+        env:
+          runner: ${{matrix.runner}}
+          pipeline: ${{github.event.head_commit.message}}
+          seed_builder: ${{vars.SEED_BUILDER || 'jevolk'}}
+          reserved_space:    '{"het": "40GB",  "aws": "12GB"}'
+          max_used_space:    '{"het": "120GB", "aws": "32GB"}'
+          cachemount_max:    '{"het": "80GB",  "aws": "12GB"}'
+          min_free_space:    '{"het": "32GB",  "aws": "16GB"}'
+          safety_free_space: '{"het": "16GB",  "aws": "8GB"}'
+          reap_idle_hours:   '{"het": "24",    "aws": "24"}'
+          reap_min_free:     '{"het": "500GB", "aws": "40GB"}'
+          seed_budget:       '{"het": "250GB", "aws": "0GB"}'
+        run: |
+          .github/workflows/init.sh
+
   lint:
     name: Lint
-    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    needs: init
+    # `!failure() && !cancelled()` rather than the default `success()`: init is
+    # skipped on pull requests, and a skipped dependency would otherwise skip
+    # every job behind it. A genuine init failure still stops the run.
+    if: >
+      !failure() && !cancelled()
+      && (github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard')
     uses: ./.github/workflows/bake.yml
     with:
       timeout: 30
@@ -88,7 +144,9 @@ jobs:
   test:
     name: Test
     needs: lint
-    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    if: >
+      !failure() && !cancelled()
+      && (github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard')
     uses: ./.github/workflows/bake.yml
     with:
       timeout: 45
@@ -119,7 +177,9 @@ jobs:
   valgrind:
     name: Valgrind
     needs: test
-    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    if: >
+      !failure() && !cancelled()
+      && (github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard')
     uses: ./.github/workflows/bake.yml
     with:
       timeout: 45
@@ -136,7 +196,9 @@ jobs:
   suite:
     name: jemalloc
     needs: valgrind
-    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    if: >
+      !failure() && !cancelled()
+      && (github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard')
     uses: ./.github/workflows/bake.yml
     with:
       timeout: 60
@@ -161,7 +223,9 @@ jobs:
   arm:
     name: aarch64
     needs: lint
-    if: github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard'
+    if: >
+      !failure() && !cancelled()
+      && (github.event_name != 'workflow_dispatch' || inputs.bake_target == 'standard')
     uses: ./.github/workflows/bake.yml
     with:
       arch: arm64
@@ -211,7 +275,10 @@ jobs:
 
   dispatch:
     name: Dispatch
-    if: github.event_name == 'workflow_dispatch' && inputs.bake_target != 'standard'
+    needs: init
+    if: >
+      !failure() && !cancelled()
+      && github.event_name == 'workflow_dispatch' && inputs.bake_target != 'standard'
     uses: ./.github/workflows/bake.yml
     with:
       arch: ${{inputs.arch}}
