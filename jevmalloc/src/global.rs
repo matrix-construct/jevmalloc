@@ -17,18 +17,16 @@
 pub mod hook;
 pub mod layout;
 
+use core::{
+	alloc::{GlobalAlloc, Layout},
+	cmp,
+	hint::assert_unchecked,
+};
+
 use libc::{c_int, c_void};
 
 use self::layout::{adjust_layout, layout_flags};
-use super::{
-	Jemalloc, ffi,
-	ffi::MALLOCX_ZERO,
-	std::{
-		alloc::{GlobalAlloc, Layout},
-		cmp,
-		hint::assert_unchecked,
-	},
-};
+use super::{Jemalloc, ffi, ffi::MALLOCX_ZERO};
 
 /// Routes Rust's global allocation operations through jemalloc.
 ///

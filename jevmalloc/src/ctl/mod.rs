@@ -36,13 +36,12 @@ pub use self::{
 	key::{KEY_SEGS, Key, NAME_MAX},
 	stats::{epoch, refresh_epoch},
 };
-use super::std;
 
 /// The result of a jemalloc control operation.
 ///
 /// A failed operation retains the nonzero status returned by jemalloc. Invalid
 /// names supplied to [`raw::mibs`] are reported as `EINVAL`.
-pub type Result<T = ()> = std::result::Result<T, Error>;
+pub type Result<T = ()> = core::result::Result<T, Error>;
 
 /// Enables or disables jemalloc's background purge workers.
 ///

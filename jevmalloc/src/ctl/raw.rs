@@ -5,16 +5,15 @@
 //! semantic preconditions and effects of a command.
 //! Prefer the typed functions in the parent module whenever one exists.
 
+use core::{
+	mem::{MaybeUninit, size_of},
+	ptr::{addr_of, addr_of_mut, null_mut},
+};
+
 use libc::{c_char, c_int, c_void, size_t};
 
 use super::{Error, KEY_SEGS, Key, NAME_MAX, Result};
-use crate::{
-	ffi,
-	std::{
-		mem::{MaybeUninit, size_of},
-		ptr::{addr_of, addr_of_mut, null_mut},
-	},
-};
+use crate::ffi;
 
 /// Resolves a jemalloc control name into a reusable MIB key.
 ///

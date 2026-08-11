@@ -1,8 +1,8 @@
 //! Error reporting for jemalloc control operations.
 
-use libc::c_int;
+use core::{error, fmt, num::NonZeroI32};
 
-use crate::std::{error, fmt, num::NonZeroI32};
+use libc::c_int;
 
 /// A nonzero status returned by jemalloc's control interface.
 ///

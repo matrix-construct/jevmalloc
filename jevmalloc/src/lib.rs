@@ -35,7 +35,6 @@
 pub mod ctl;
 pub mod global;
 
-use ::core as std;
 /// Re-exports the raw jemalloc bindings.
 ///
 /// The `jevmalloc-sys` crate exposes the C entry points, the `MALLOCX_*` flag
