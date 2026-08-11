@@ -33,7 +33,7 @@
 #![no_std]
 
 pub mod ctl;
-pub mod global_alloc;
+pub mod global;
 
 use ::core as std;
 /// Re-exports the raw jemalloc bindings.
@@ -44,7 +44,7 @@ use ::core as std;
 pub use ::jevmalloc_sys as ffi;
 
 /// Re-exports the allocator layout utilities.
-pub use self::global_alloc::layout::*;
+pub use self::global::layout::*;
 
 /// Selects jemalloc as a Rust global allocator.
 ///
@@ -62,4 +62,4 @@ pub struct Jemalloc;
 /// downstream users. It is compiled only for this crate's unit-test target.
 #[cfg(test)]
 #[global_allocator]
-static ALLOC: Jemalloc = Jemalloc;
+static ALLOCATOR: Jemalloc = Jemalloc;

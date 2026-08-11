@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Observation hooks for jemalloc-backed global allocation operations.
+//! Observation hooks for jemalloc-backed Rust allocation operations.
 //!
 //! Each slot is consulted only with the `global_hooks` feature enabled and is
 //! empty until an application installs a callback. Hooks run before layout

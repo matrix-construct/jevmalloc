@@ -72,6 +72,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 		// SAFETY: null is accepted; otherwise `mallocx` returned a live
 		// allocation described by this layout and flags.
 		unsafe { debug_validate(ptr, layout, flags) };
+
 		ptr.cast::<u8>()
 	}
 
@@ -107,6 +108,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 		// SAFETY: null is accepted; otherwise `mallocx` returned a live
 		// allocation described by this layout and flags.
 		unsafe { debug_validate(ptr, layout, flags) };
+
 		ptr.cast::<u8>()
 	}
 
@@ -147,6 +149,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 		// SAFETY: null is accepted; otherwise `rallocx` returned a live
 		// allocation described by this layout and flags.
 		unsafe { debug_validate(ptr, layout, flags) };
+
 		ptr.cast::<u8>()
 	}
 
