@@ -14,7 +14,7 @@ keywords = ["allocator", "jemalloc"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/matrix-construct/jevmalloc"
-version = "0.0.0+5.3.1-1-g3a02c75e04e4286f03e931926bb3b322a769bd2c"
+version = "0.0.0+5.3.1-2-gee054313a33bef077b946fe744adae423b1a1b4f"
 
 [workspace.dependencies]
 arrayvec = { version = "0", default-features = false }
