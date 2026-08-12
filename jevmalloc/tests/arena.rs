@@ -8,10 +8,13 @@ use core::{
 };
 use std::sync::Mutex;
 
-use jevmalloc::{Arena, ExtentHooks, Jemalloc, arena, ctl, ffi, thread};
+use jevmalloc::{
+	Arena, Extent, ExtentAlloc, ExtentAllocation, ExtentCallbacks, ExtentHookResult, ExtentHooks,
+	Jemalloc, RawExtentHooks, arena, ctl, ffi, thread,
+};
 #[cfg(target_env = "msvc")]
 use libc::c_int;
-use libc::{c_uint, c_void, size_t};
+use libc::c_void;
 
 /// Jemalloc's C boolean representation under cl.exe.
 #[cfg(target_env = "msvc")]
@@ -28,83 +31,127 @@ static ALLOC: Jemalloc = Jemalloc;
 /// Serializes lifecycle changes within this integration-test process.
 static CONTROL: Mutex<()> = Mutex::new(());
 
-/// Jemalloc's immutable default hook table used by the forwarding callbacks.
-static DEFAULT_HOOKS: AtomicPtr<ffi::extent_hooks_t> = AtomicPtr::new(null_mut());
+/// State owned by the forwarding extent hook table.
+#[derive(Debug)]
+struct Forwarding {
+	/// Jemalloc's immutable default hook table.
+	default: AtomicPtr<RawExtentHooks>,
 
-/// Number of allocation requests observed by the forwarding table.
-static HOOK_ALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
+	/// Number of allocation requests observed by the table.
+	allocations: AtomicUsize,
+}
 
-/// Static typed table used to cross the custom-hook FFI boundary.
-static FORWARDING_HOOKS: ExtentHooks = ExtentHooks::new(forward_allocate)
-	.with_deallocate(forward_deallocate)
-	.with_destroy(forward_destroy);
+/// Static stateful table used to cross the custom-hook FFI boundary.
+static FORWARDING_HOOKS: ExtentHooks<Forwarding> = ExtentHooks::new(
+	Forwarding {
+		default: AtomicPtr::new(null_mut()),
+		allocations: AtomicUsize::new(0),
+	},
+	ExtentCallbacks {
+		alloc: Some(forward_allocate),
+		dalloc: Some(forward_deallocate),
+		destroy: Some(forward_destroy),
+		..ExtentCallbacks::EMPTY
+	},
+);
 
-/// Returns the callback representation for failure or opt-out.
+/// Converts a Rust callback boolean to its C representation.
 #[cfg(target_env = "msvc")]
-const fn hook_failure() -> CBool { 1 }
+const fn hook_bool(value: bool) -> CBool {
+	match value {
+		| true => 1,
+		| false => 0,
+	}
+}
 
-/// Returns the callback representation for failure or opt-out.
+/// Converts a Rust callback boolean to its C representation.
 #[cfg(not(target_env = "msvc"))]
-const fn hook_failure() -> CBool { true }
+const fn hook_bool(value: bool) -> CBool { value }
+
+/// Converts a C callback boolean to its Rust representation.
+#[cfg(target_env = "msvc")]
+const fn hook_bool_from_c(value: CBool) -> bool { value != 0 }
+
+/// Converts a C callback boolean to its Rust representation.
+#[cfg(not(target_env = "msvc"))]
+const fn hook_bool_from_c(value: CBool) -> bool { value }
+
+/// Converts the raw failure convention to the Rust callback outcome.
+const fn hook_result(failed: CBool) -> ExtentHookResult {
+	if hook_bool_from_c(failed) {
+		ExtentHookResult::Failure
+	} else {
+		ExtentHookResult::Success
+	}
+}
 
 /// Counts an allocation request and forwards it to jemalloc's default hook.
-unsafe extern "C" fn forward_allocate(
-	_hooks: *mut ffi::extent_hooks_t,
-	new_addr: *mut c_void,
-	size: size_t,
-	alignment: size_t,
-	zero: *mut CBool,
-	commit: *mut CBool,
-	arena: c_uint,
-) -> *mut c_void {
-	HOOK_ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
-	let hooks = DEFAULT_HOOKS.load(Ordering::Acquire);
+unsafe fn forward_allocate(state: &Forwarding, request: ExtentAlloc) -> Option<ExtentAllocation> {
+	state.allocations.fetch_add(1, Ordering::Relaxed);
+	let hooks = state.default.load(Ordering::Acquire);
 	if hooks.is_null() {
-		return null_mut();
+		return None;
 	}
 
 	// SAFETY: the test publishes jemalloc's immutable process-lifetime default
 	// table before installing `FORWARDING_HOOKS`.
-	match unsafe { (*hooks).alloc } {
-		// SAFETY: every callback argument is forwarded unchanged under the
-		// allocation-hook contract that this function inherited from jemalloc.
-		| Some(allocate) => unsafe {
-			allocate(hooks, new_addr, size, alignment, zero, commit, arena)
-		},
-		| None => null_mut(),
-	}
+	let allocate = (unsafe { (*hooks).alloc })?;
+	let new_address = request
+		.address
+		.map_or(null_mut(), |address| address.as_ptr().cast::<c_void>());
+	let mut zeroed = hook_bool(request.zeroed);
+	let mut committed = hook_bool(request.committed);
+
+	// SAFETY: every request field is forwarded under the allocation-hook
+	// contract inherited from jemalloc.
+	let address = unsafe {
+		allocate(
+			hooks,
+			new_address,
+			request.size,
+			request.alignment,
+			&raw mut zeroed,
+			&raw mut committed,
+			request.arena,
+		)
+	};
+
+	NonNull::new(address.cast::<u8>()).map(|address| ExtentAllocation {
+		address,
+		zeroed: hook_bool_from_c(zeroed),
+		committed: hook_bool_from_c(committed),
+	})
 }
 
 /// Forwards deallocation to jemalloc's default hook when it is available.
-unsafe extern "C" fn forward_deallocate(
-	_hooks: *mut ffi::extent_hooks_t,
-	addr: *mut c_void,
-	size: size_t,
-	committed: CBool,
-	arena: c_uint,
-) -> CBool {
-	let hooks = DEFAULT_HOOKS.load(Ordering::Acquire);
+unsafe fn forward_deallocate(state: &Forwarding, extent: Extent) -> ExtentHookResult {
+	let hooks = state.default.load(Ordering::Acquire);
 	if hooks.is_null() {
-		return hook_failure();
+		return ExtentHookResult::Failure;
 	}
 
 	// SAFETY: the published default table remains valid for the process.
-	match unsafe { (*hooks).dalloc } {
-		// SAFETY: arguments are forwarded under the inherited hook contract.
-		| Some(deallocate) => unsafe { deallocate(hooks, addr, size, committed, arena) },
-		| None => hook_failure(),
-	}
+	let Some(deallocate) = (unsafe { (*hooks).dalloc }) else {
+		return ExtentHookResult::Failure;
+	};
+
+	// SAFETY: arguments are forwarded under the inherited hook contract.
+	let failed = unsafe {
+		deallocate(
+			hooks,
+			extent.address.as_ptr().cast::<c_void>(),
+			extent.size,
+			hook_bool(extent.committed),
+			extent.arena,
+		)
+	};
+
+	hook_result(failed)
 }
 
 /// Forwards unconditional destruction to jemalloc's default hook.
-unsafe extern "C" fn forward_destroy(
-	_hooks: *mut ffi::extent_hooks_t,
-	addr: *mut c_void,
-	size: size_t,
-	committed: CBool,
-	arena: c_uint,
-) {
-	let hooks = DEFAULT_HOOKS.load(Ordering::Acquire);
+unsafe fn forward_destroy(state: &Forwarding, extent: Extent) {
+	let hooks = state.default.load(Ordering::Acquire);
 	if hooks.is_null() {
 		return;
 	}
@@ -112,7 +159,15 @@ unsafe extern "C" fn forward_destroy(
 	// SAFETY: the published default table remains valid for the process.
 	if let Some(destroy) = unsafe { (*hooks).destroy } {
 		// SAFETY: arguments are forwarded under the inherited hook contract.
-		unsafe { destroy(hooks, addr, size, committed, arena) };
+		unsafe {
+			destroy(
+				hooks,
+				extent.address.as_ptr().cast::<c_void>(),
+				extent.size,
+				hook_bool(extent.committed),
+				extent.arena,
+			);
+		};
 	}
 }
 
@@ -247,18 +302,30 @@ fn typed_extent_hooks_at_creation() {
 	let _guard = CONTROL.lock().unwrap();
 	let seed = Arena::create().unwrap();
 	let default = seed.extent_hooks().unwrap();
-	DEFAULT_HOOKS.store(default.as_ptr(), Ordering::Release);
+	FORWARDING_HOOKS
+		.state()
+		.default
+		.store(default.as_ptr(), Ordering::Release);
 
 	// SAFETY: the static forwarding table delegates to jemalloc's immutable
 	// default table, preserves every callback contract, and never unwinds.
 	let arena = unsafe { Arena::create_with_extent_hooks(&FORWARDING_HOOKS) }.unwrap();
-	HOOK_ALLOCATIONS.store(0, Ordering::Relaxed);
+	FORWARDING_HOOKS
+		.state()
+		.allocations
+		.store(0, Ordering::Relaxed);
 	let flags = arena.flags() | ffi::MALLOCX_TCACHE_NONE;
 
 	// SAFETY: the size is nonzero, the arena is live, and the tcache is bypassed.
 	let allocation = unsafe { ffi::mallocx(8 * 1024 * 1024, flags) };
 	let allocation = NonNull::new(allocation).expect("typed-hook allocation failed");
-	assert!(HOOK_ALLOCATIONS.load(Ordering::Relaxed) > 0);
+	assert!(
+		FORWARDING_HOOKS
+			.state()
+			.allocations
+			.load(Ordering::Relaxed)
+			> 0
+	);
 
 	// SAFETY: the allocation is live and the flags select its original arena.
 	unsafe { ffi::dallocx(allocation.as_ptr(), flags) };
@@ -277,20 +344,32 @@ fn typed_extent_hooks_at_replacement() {
 	let _guard = CONTROL.lock().unwrap();
 	let arena = Arena::create().unwrap();
 	let default = arena.extent_hooks().unwrap();
-	DEFAULT_HOOKS.store(default.as_ptr(), Ordering::Release);
+	FORWARDING_HOOKS
+		.state()
+		.default
+		.store(default.as_ptr(), Ordering::Release);
 
 	// SAFETY: the static forwarding table delegates every managed mapping to
 	// the table it replaces and remains valid for the process.
 	let previous = unsafe { arena.set_extent_hooks(&FORWARDING_HOOKS) }.unwrap();
 	assert_eq!(previous, default);
 
-	HOOK_ALLOCATIONS.store(0, Ordering::Relaxed);
+	FORWARDING_HOOKS
+		.state()
+		.allocations
+		.store(0, Ordering::Relaxed);
 	let flags = arena.flags() | ffi::MALLOCX_TCACHE_NONE;
 
 	// SAFETY: the size is nonzero, the arena is live, and the tcache is bypassed.
 	let allocation = unsafe { ffi::mallocx(8 * 1024 * 1024, flags) };
 	let allocation = NonNull::new(allocation).expect("replacement-hook allocation failed");
-	assert!(HOOK_ALLOCATIONS.load(Ordering::Relaxed) > 0);
+	assert!(
+		FORWARDING_HOOKS
+			.state()
+			.allocations
+			.load(Ordering::Relaxed)
+			> 0
+	);
 
 	// SAFETY: the allocation is live and the flags select its original arena.
 	unsafe { ffi::dallocx(allocation.as_ptr(), flags) };
@@ -298,7 +377,7 @@ fn typed_extent_hooks_at_replacement() {
 	// SAFETY: restoring the original process-lifetime table preserves all
 	// extents, and both tables remain valid.
 	let replaced = unsafe { arena.set_raw_extent_hooks(default) }.unwrap();
-	assert_eq!(replaced, NonNull::from(FORWARDING_HOOKS.as_raw()));
+	assert_eq!(replaced, FORWARDING_HOOKS.as_raw());
 
 	// SAFETY: the allocation was freed without a tcache, the default hooks are
 	// restored, and the arena is unassociated.

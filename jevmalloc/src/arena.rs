@@ -22,7 +22,12 @@ use libc::{c_char, c_int, c_uint};
 pub use self::{
 	destroy_error::ArenaDestroyError,
 	dss::Dss,
-	extent_hooks::ExtentHooks,
+	extent_hooks::{
+		EMPTY_RAW_EXTENT_HOOKS, Extent, ExtentAlloc, ExtentAllocFn, ExtentAllocation,
+		ExtentCallbacks, ExtentDallocFn, ExtentDestroyFn, ExtentHookResult, ExtentHooks,
+		ExtentMerge, ExtentMergeFn, ExtentRange, ExtentRangeFn, ExtentSplit, ExtentSplitFn,
+		RawExtentHooks,
+	},
 	name::{ARENA_NAME_LEN, ArenaName},
 };
 use crate::{
@@ -83,21 +88,20 @@ impl Arena {
 	///
 	/// # Errors
 	///
-	/// Returns an error if jemalloc cannot create the arena or returns an
-	/// invalid index.
+	/// Returns an error if the table has no allocation callback, jemalloc
+	/// cannot create the arena, or jemalloc returns an invalid index.
 	///
 	/// # Safety
 	///
-	/// The table and any state reached through it must remain at stable
-	/// addresses for the rest of the process. Its callbacks must uphold the
-	/// contracts of the corresponding [`ffi`] types, synchronize concurrent
-	/// calls, and never unwind into jemalloc. Callbacks must not mutate the
-	/// hook table through the mutable pointer jemalloc passes to them.
-	pub unsafe fn create_with_extent_hooks(hooks: &'static ExtentHooks) -> Result<Self> {
-		let hooks = NonNull::from(hooks.as_raw());
+	/// Every callback must uphold its mapping contract and never unwind into
+	/// jemalloc. Any mutable callback state must synchronize concurrent calls.
+	pub unsafe fn create_with_extent_hooks<State: Sync + 'static>(
+		hooks: &'static ExtentHooks<State>,
+	) -> Result<Self> {
+		let hooks = hooks.as_raw();
 
-		// SAFETY: the static typed table has a mandatory allocation hook. The
-		// caller guarantees every callback and process-lifetime state invariant.
+		// SAFETY: the static stateful table preserves the raw header's address. The
+		// caller guarantees every callback contract.
 		unsafe { Self::create_with_raw_extent_hooks(hooks) }
 	}
 
@@ -118,9 +122,7 @@ impl Arena {
 	/// `hooks` must remain valid and immutable for the rest of the process. Its
 	/// callbacks and reachable state must satisfy the same requirements as
 	/// [`Arena::create_with_extent_hooks`].
-	pub unsafe fn create_with_raw_extent_hooks(
-		hooks: NonNull<ffi::extent_hooks_t>,
-	) -> Result<Self> {
+	pub unsafe fn create_with_raw_extent_hooks(hooks: NonNull<RawExtentHooks>) -> Result<Self> {
 		// SAFETY: the caller guarantees that `hooks` points to a live table.
 		if unsafe { hooks.as_ref() }.alloc.is_none() {
 			return Err(Error::invalid_argument());
@@ -519,7 +521,7 @@ impl Arena {
 	/// # Errors
 	///
 	/// Returns an error if jemalloc rejects the arena, query, or a null result.
-	pub fn extent_hooks(&self) -> Result<NonNull<ffi::extent_hooks_t>> {
+	pub fn extent_hooks(&self) -> Result<NonNull<RawExtentHooks>> {
 		let key = self.select(key::arena_extent_hooks()?);
 
 		// SAFETY: `arena.<i>.extent_hooks` returns an `extent_hooks_t *`.
@@ -537,22 +539,21 @@ impl Arena {
 	///
 	/// # Errors
 	///
-	/// Returns an error if jemalloc rejects the arena or replacement.
+	/// Returns an error if the table has no allocation callback or jemalloc
+	/// rejects the arena or replacement.
 	///
 	/// # Safety
 	///
 	/// The replacement callbacks must manage every extant arena extent,
 	/// commonly by forwarding unknown mappings to the previous table. They
-	/// must satisfy [`Arena::create_with_extent_hooks`]'s concurrency and
-	/// callback contracts and must not mutate the table through their mutable
-	/// hook pointer. Setting hooks on an uninitialized automatic arena
-	/// initializes it, and jemalloc provides only best effort hook coverage for
-	/// automatic arenas.
-	pub unsafe fn set_extent_hooks(
+	/// must satisfy [`Arena::create_with_extent_hooks`]'s callback contracts.
+	/// Setting hooks on an uninitialized automatic arena initializes it, and
+	/// jemalloc provides only best effort hook coverage for automatic arenas.
+	pub unsafe fn set_extent_hooks<State: Sync + 'static>(
 		&self,
-		hooks: &'static ExtentHooks,
-	) -> Result<NonNull<ffi::extent_hooks_t>> {
-		let hooks = NonNull::from(hooks.as_raw());
+		hooks: &'static ExtentHooks<State>,
+	) -> Result<NonNull<RawExtentHooks>> {
+		let hooks = hooks.as_raw();
 
 		// SAFETY: the caller guarantees that the static replacement handles every
 		// extant extent and satisfies all callback requirements.
@@ -580,8 +581,8 @@ impl Arena {
 	/// only best effort hook coverage.
 	pub unsafe fn set_raw_extent_hooks(
 		&self,
-		hooks: NonNull<ffi::extent_hooks_t>,
-	) -> Result<NonNull<ffi::extent_hooks_t>> {
+		hooks: NonNull<RawExtentHooks>,
+	) -> Result<NonNull<RawExtentHooks>> {
 		// SAFETY: the caller guarantees that `hooks` points to a live table.
 		if unsafe { hooks.as_ref() }.alloc.is_none() {
 			return Err(Error::invalid_argument());

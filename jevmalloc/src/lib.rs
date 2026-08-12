@@ -51,7 +51,10 @@ pub mod thread;
 /// contracts documented there.
 pub use ::jevmalloc_sys as ffi;
 pub use arena::{
-	ARENA_INDEX_LIMIT, ARENA_NAME_LEN, Arena, ArenaDestroyError, ArenaName, Dss, ExtentHooks,
+	ARENA_INDEX_LIMIT, ARENA_NAME_LEN, Arena, ArenaDestroyError, ArenaName, Dss,
+	EMPTY_RAW_EXTENT_HOOKS, Extent, ExtentAlloc, ExtentAllocFn, ExtentAllocation,
+	ExtentCallbacks, ExtentDallocFn, ExtentDestroyFn, ExtentHookResult, ExtentHooks, ExtentMerge,
+	ExtentMergeFn, ExtentRange, ExtentRangeFn, ExtentSplit, ExtentSplitFn, RawExtentHooks,
 };
 
 pub use self::ctl::{Error, Result};
