@@ -27,7 +27,7 @@ pub use self::{
 };
 use crate::{
 	ctl::{Error, Key, Result, key, raw},
-	ffi, this_thread,
+	ffi, thread,
 };
 
 /// Exclusive upper bound for ordinary jemalloc arena indices.
@@ -192,7 +192,7 @@ impl Arena {
 	/// Returns an error if jemalloc rejects the thread query or reports an
 	/// invalid arena index.
 	pub fn current() -> Result<Self> {
-		let index = this_thread::arena_id()?;
+		let index = thread::this::arena_id()?;
 
 		// SAFETY: the current thread's association pins a manual arena against
 		// destruction. Any unsafe reassignment must account for handles it unpins.
@@ -271,7 +271,7 @@ impl Arena {
 	/// synchronized with reset, destruction, and index recycling.
 	pub unsafe fn set_current(&self) -> Result<Self> {
 		// SAFETY: the caller accepts the allocation and cache lifetime contract.
-		let previous = unsafe { this_thread::set_arena(self.index) }?;
+		let previous = unsafe { thread::this::set_arena(self.index) }?;
 
 		// SAFETY: the caller accepts responsibility for the previous arena's
 		// liveness after removing the thread association that pinned it.

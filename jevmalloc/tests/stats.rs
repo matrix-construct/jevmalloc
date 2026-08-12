@@ -4,7 +4,7 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 
-use jevmalloc::{Jemalloc, stats, stats_reset, this_thread};
+use jevmalloc::{Jemalloc, stats, stats_reset, thread};
 
 /// Routes test-harness allocations through the observed jemalloc instance.
 #[global_allocator]
@@ -36,7 +36,7 @@ fn global_stats_are_readable() {
 /// Checks direct thread-counter handles and ordinary counter reads.
 #[test]
 fn thread_counters_remain_distinct_and_monotonic() {
-	let counters = this_thread::ThreadCounters::current().unwrap();
+	let counters = thread::ThreadCounters::current().unwrap();
 	let allocated_before = counters.allocated();
 	let deallocated_before = counters.deallocated();
 	let layout = Layout::from_size_align(4096, 64).unwrap();
@@ -47,7 +47,7 @@ fn thread_counters_remain_distinct_and_monotonic() {
 	let allocated_after = counters.allocated();
 	assert!(allocated_after.wrapping_sub(allocated_before) >= layout.size() as u64);
 	assert!(
-		this_thread::allocated()
+		thread::this::allocated()
 			.unwrap()
 			.wrapping_sub(allocated_after)
 			<= u64::MAX / 2
@@ -58,7 +58,7 @@ fn thread_counters_remain_distinct_and_monotonic() {
 	let deallocated_after = counters.deallocated();
 	assert!(deallocated_after.wrapping_sub(deallocated_before) >= layout.size() as u64);
 	assert!(
-		this_thread::deallocated()
+		thread::this::deallocated()
 			.unwrap()
 			.wrapping_sub(deallocated_after)
 			<= u64::MAX / 2
@@ -68,7 +68,7 @@ fn thread_counters_remain_distinct_and_monotonic() {
 /// Checks the peak and mutex-statistics command controls.
 #[test]
 fn reset_commands_succeed() {
-	this_thread::reset_peak().unwrap();
-	let _peak = this_thread::peak().unwrap();
+	thread::this::reset_peak().unwrap();
+	let _peak = thread::this::peak().unwrap();
 	stats_reset().unwrap();
 }

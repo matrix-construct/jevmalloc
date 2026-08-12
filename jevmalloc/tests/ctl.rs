@@ -5,7 +5,7 @@
 use core::alloc::{GlobalAlloc, Layout};
 use std::sync::Mutex;
 
-use jevmalloc::{Dss, Jemalloc, arenas, ctl, stats, this_thread};
+use jevmalloc::{Dss, Jemalloc, arenas, ctl, stats, thread};
 
 /// Jemalloc's C `bool` representation when built by cl.exe.
 #[cfg(target_env = "msvc")]
@@ -153,25 +153,25 @@ fn future_arena_dss_exchange() {
 /// Checks current-thread MIB substitution and scalar exchanges.
 #[test]
 fn current_thread_controls() {
-	let arena = this_thread::arena_id().unwrap();
+	let arena = thread::this::arena_id().unwrap();
 	assert!(arena < arenas::limit().unwrap());
 	if !arenas::is_affine() {
 		// SAFETY: reselecting the current arena changes no allocation lifetime.
-		assert_eq!(unsafe { this_thread::set_arena(arena) }.unwrap(), arena);
+		assert_eq!(unsafe { thread::this::set_arena(arena) }.unwrap(), arena);
 	}
 
-	let muzzy = this_thread::get_muzzy_decay().unwrap();
-	let dirty = this_thread::get_dirty_decay().unwrap();
-	assert_eq!(this_thread::set_muzzy_decay(muzzy).unwrap(), muzzy);
-	assert_eq!(this_thread::set_dirty_decay(dirty).unwrap(), dirty);
+	let muzzy = thread::this::get_muzzy_decay().unwrap();
+	let dirty = thread::this::get_dirty_decay().unwrap();
+	assert_eq!(thread::this::set_muzzy_decay(muzzy).unwrap(), muzzy);
+	assert_eq!(thread::this::set_dirty_decay(dirty).unwrap(), dirty);
 
-	let cache = this_thread::is_cache_enabled().unwrap();
-	assert_eq!(this_thread::cache_enable(true).unwrap(), cache);
-	this_thread::flush().unwrap();
+	let cache = thread::this::is_cache_enabled().unwrap();
+	assert_eq!(thread::this::cache_enable(true).unwrap(), cache);
+	thread::this::flush().unwrap();
 	if !cache {
-		assert!(this_thread::cache_enable(false).unwrap());
+		assert!(thread::this::cache_enable(false).unwrap());
 	}
 
-	this_thread::trim().unwrap();
-	this_thread::idle().unwrap();
+	thread::this::trim().unwrap();
+	thread::this::idle().unwrap();
 }

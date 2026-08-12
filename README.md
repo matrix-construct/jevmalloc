@@ -74,13 +74,16 @@ because the caller must synchronize it with destruction and index recycling.
 
 Allocator-wide queries, future-arena defaults, and the all-arenas reclamation
 commands live under `jevmalloc::arenas`. Thread controls live under
-`jevmalloc::this_thread`; arena operations resolve an `arena.0.*` template and
+`jevmalloc::thread::this`; arena operations resolve an `arena.0.*` template and
 replace the numeric component with `thread.arena` before delegating to the same
-instance methods.
+instance methods. `jevmalloc::thread::ThreadCache` owns an explicitly created
+tcache, supplies its extended-allocation flag, and destroys it on drop. Its
+indexed flush is separate from the calling thread's argument-free automatic
+cache flush.
 
 Epoch refresh is explicit. Ordinary configuration and thread queries read live
 state and do not force a process-wide statistics refresh. With the `stats`
-feature, `jevmalloc::this_thread::ThreadCounters` provides repeated direct reads
+feature, `jevmalloc::thread::ThreadCounters` provides repeated direct reads
 of the calling thread's allocation counters without exposing them as immutable
 static references.
 
@@ -106,7 +109,7 @@ start with `prof:true` in its allocator configuration. Epoch operations live
 under `jevmalloc::stats`. With the `stats` feature, that module also exposes all
 documented fixed-name global statistics that precede the mutex and arena
 families. Counter handles and peak controls live under
-`jevmalloc::this_thread`, and mutex-statistics reset is present under
+`jevmalloc::thread`, and mutex-statistics reset is present under
 `jevmalloc::stats` with the `stats` feature.
 
 ## Symbol prefixing

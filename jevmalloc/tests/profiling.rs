@@ -3,8 +3,7 @@
 #![cfg(test)]
 
 use jevmalloc::{
-	Jemalloc, ctl, is_prof_enabled, prof_enable, prof_gdump, prof_interval, prof_reset,
-	this_thread,
+	Jemalloc, ctl, is_prof_enabled, prof_enable, prof_gdump, prof_interval, prof_reset, thread,
 };
 
 /// Jemalloc's C `bool` representation when built by cl.exe.
@@ -53,7 +52,7 @@ static ALLOC: Jemalloc = Jemalloc;
 #[test]
 fn profiling_state_round_trips() {
 	let global = is_prof_enabled().unwrap();
-	let thread = this_thread::is_prof_enabled().unwrap();
+	let thread_enabled = thread::this::is_prof_enabled().unwrap();
 	let gdump_key = ctl::raw::mibs("prof.gdump").unwrap();
 
 	// SAFETY: this is the complete `prof.gdump` MIB, and `CBool` matches the
@@ -63,7 +62,7 @@ fn profiling_state_round_trips() {
 
 	assert_eq!(prof_enable(global).unwrap(), global);
 	assert_eq!(prof_gdump(gdump).unwrap(), gdump);
-	assert_eq!(this_thread::prof_enable(thread).unwrap(), thread);
+	assert_eq!(thread::this::prof_enable(thread_enabled).unwrap(), thread_enabled);
 	let _interval = prof_interval().unwrap();
 }
 

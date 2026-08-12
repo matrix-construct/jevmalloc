@@ -12,9 +12,9 @@
 //!
 //! [`Jemalloc`] implements [`GlobalAlloc`] and can service the process-wide
 //! `#[global_allocator]` slot. Typed allocator operations are grouped by scope
-//! in [`Arena`], [`arenas`], [`config`], [`opt`], [`stats`], and
-//! [`this_thread`]. The [`ctl`] module exposes MIB-based control-interface
-//! primitives, while [`ffi`] re-exports the underlying C bindings.
+//! in [`Arena`], [`arenas`], [`config`], [`opt`], [`stats`], and [`thread`].
+//! The [`ctl`] module exposes MIB-based control-interface primitives, while
+//! [`ffi`] re-exports the underlying C bindings.
 //!
 //! ```
 //! #[global_allocator]
@@ -42,7 +42,7 @@ pub mod opt;
 #[cfg(feature = "profiling")]
 pub mod profiling;
 pub mod stats;
-pub mod this_thread;
+pub mod thread;
 
 /// Re-exports the raw jemalloc bindings.
 ///
@@ -54,6 +54,7 @@ pub use arena::{
 	ARENA_INDEX_LIMIT, ARENA_NAME_LEN, Arena, ArenaDestroyError, ArenaName, Dss, ExtentHooks,
 };
 
+pub use self::ctl::{Error, Result};
 /// Re-exports the allocator layout utilities.
 pub use self::global::layout::*;
 #[cfg(feature = "profiling")]
@@ -93,7 +94,7 @@ static ALLOCATOR: Jemalloc = Jemalloc;
 /// # Errors
 ///
 /// Returns an error if jemalloc rejects the read or update.
-pub fn background_thread_enable(enable: bool) -> self::ctl::Result<bool> {
+pub fn background_thread_enable(enable: bool) -> Result<bool> {
 	let key = self::ctl::key::background_thread()?;
 	self::ctl::value::xchg_bool(&key, enable)
 }

@@ -8,7 +8,7 @@ use core::{
 };
 use std::sync::Mutex;
 
-use jevmalloc::{Arena, ExtentHooks, Jemalloc, arena, ctl, ffi, this_thread};
+use jevmalloc::{Arena, ExtentHooks, Jemalloc, arena, ctl, ffi, thread};
 #[cfg(target_env = "msvc")]
 use libc::c_int;
 use libc::{c_uint, c_void, size_t};
@@ -211,7 +211,7 @@ fn destruction_failure_retains_owner() {
 	// any allocation is performed.
 	let restored = unsafe { previous.set_current() }.unwrap();
 	assert_eq!(restored.index(), failure.arena().index());
-	this_thread::flush().unwrap();
+	thread::this::flush().unwrap();
 
 	let (error, arena) = failure.into_parts();
 	assert!(error.is(libc::EFAULT));

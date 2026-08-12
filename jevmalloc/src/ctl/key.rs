@@ -112,6 +112,15 @@ define_key!(thread_idle, "thread.idle");
 define_key!(thread_arena, "thread.arena");
 define_key!(thread_tcache_flush, "thread.tcache.flush");
 define_key!(thread_tcache_enabled, "thread.tcache.enabled");
+define_key!(thread_tcache_max, "thread.tcache.max");
+define_key!(
+	thread_tcache_ncached_max_read_sizeclass,
+	"thread.tcache.ncached_max.read_sizeclass"
+);
+define_key!(thread_tcache_ncached_max_write, "thread.tcache.ncached_max.write");
+define_key!(tcache_create, "tcache.create");
+define_key!(tcache_flush, "tcache.flush");
+define_key!(tcache_destroy, "tcache.destroy");
 
 #[cfg(feature = "profiling")]
 define_key!(prof_reset, "prof.reset");

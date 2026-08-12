@@ -4,15 +4,18 @@
 //! into an `arena.0.*` MIB template. The literal zero is only a placeholder;
 //! these functions do not accidentally operate on arena zero.
 
-#[cfg(feature = "stats")]
-use core::{marker::PhantomData, ptr::NonNull};
+use core::ffi::CStr;
 
-use libc::c_uint;
+use libc::{c_char, c_uint};
 
 use crate::{
 	Arena, arena,
 	ctl::{Error, Result, key, raw, value},
 };
+
+/// Maximum settings length accepted by [`set_tcache_ncached_max`], including
+/// the terminating NUL byte.
+pub const TCACHE_NCACHED_MAX_SETTINGS_LEN: usize = 1000;
 
 /// Reclaims unused pages from the calling thread's arena.
 ///
@@ -63,8 +66,8 @@ pub fn idle() -> Result {
 
 /// Flushes the calling thread's automatic allocation cache.
 ///
-/// Cached objects and the cache's internal structures are returned to the
-/// thread's arena.
+/// Cached objects are returned to their arenas. The automatically managed cache
+/// remains available and retains its internal storage.
 ///
 /// # Errors
 ///
@@ -140,6 +143,90 @@ pub fn cache_enable(enable: bool) -> Result<bool> {
 pub fn is_cache_enabled() -> Result<bool> {
 	let key = key::thread_tcache_enabled()?;
 	value::get_bool(&key)
+}
+
+/// Returns the largest size class cached by the calling thread's automatic
+/// allocation cache.
+///
+/// The value remains available while the automatic cache is disabled.
+///
+/// # Errors
+///
+/// Returns an error if jemalloc rejects the query.
+pub fn tcache_max() -> Result<usize> {
+	let key = key::thread_tcache_max()?;
+
+	// SAFETY: `thread.tcache.max` has C output type `size_t`.
+	unsafe { raw::get(&key) }
+}
+
+/// Sets the largest size class cached by the calling thread's automatic
+/// allocation cache.
+///
+/// Jemalloc clamps the request to its implementation limit and rounds it up to
+/// a size-class boundary. The previous maximum is returned; call [`tcache_max`]
+/// afterward to observe the applied value. Changing the maximum rebuilds an
+/// enabled cache.
+///
+/// # Errors
+///
+/// Returns an error if jemalloc rejects the update.
+pub fn set_tcache_max(max: usize) -> Result<usize> {
+	let key = key::thread_tcache_max()?;
+
+	// SAFETY: `thread.tcache.max` uses `size_t` for input and output.
+	unsafe { raw::xchg(&key, &max) }
+}
+
+/// Returns the maximum number of objects cached for the supplied size class by
+/// the calling thread's automatic allocation cache.
+///
+/// A size between class boundaries selects the next larger class. A disabled
+/// cache reports zero.
+///
+/// # Errors
+///
+/// Returns an error if the requested size exceeds jemalloc's cacheable limit or
+/// jemalloc otherwise rejects the query.
+pub fn tcache_ncached_max(size_class: usize) -> Result<usize> {
+	let key = key::thread_tcache_ncached_max_read_sizeclass()?;
+
+	// SAFETY: this control accepts one `size_t` size-class input and returns one
+	// `size_t` object-count output.
+	unsafe { raw::update(&key, &size_class) }
+}
+
+/// Sets maximum cached-object counts for size classes in the calling thread's
+/// automatic allocation cache.
+///
+/// `settings` uses pipe-separated `start-end:count` entries. Jemalloc clamps
+/// ranges and counts to its implementation limits, then rebuilds the current
+/// cache. An empty string is a successful no-op. This wrapper copies the bytes
+/// into fixed stack storage because jemalloc scans up to
+/// [`TCACHE_NCACHED_MAX_SETTINGS_LEN`] bytes, even after receiving a shorter
+/// borrowed C string.
+///
+/// # Errors
+///
+/// Returns `EINVAL` when the terminated string exceeds
+/// [`TCACHE_NCACHED_MAX_SETTINGS_LEN`] or has invalid syntax. Returns `ENOENT`
+/// when the calling thread's automatic cache is unavailable. Other jemalloc
+/// failures are returned unchanged.
+pub fn set_tcache_ncached_max(settings: &CStr) -> Result {
+	let bytes = settings.to_bytes_with_nul();
+	if bytes.len() > TCACHE_NCACHED_MAX_SETTINGS_LEN {
+		return Err(Error::invalid_argument());
+	}
+
+	let key = key::thread_tcache_ncached_max_write()?;
+	let mut buffer = [0_u8; TCACHE_NCACHED_MAX_SETTINGS_LEN];
+	buffer[..bytes.len()].copy_from_slice(bytes);
+	let settings = buffer.as_mut_ptr().cast::<c_char>();
+
+	// SAFETY: the control's C input is a `char *` value. It scans at most the
+	// full live `buffer`, finds the copied terminator, parses synchronously, and
+	// retains no pointer.
+	unsafe { raw::set(&key, &settings) }
 }
 
 /// Associates the calling thread with a jemalloc arena.
@@ -243,8 +330,8 @@ pub fn peak() -> Result<u64> {
 
 /// Returns the total number of bytes allocated by the calling thread.
 ///
-/// The counter can wrap. Use [`ThreadCounters`] when sampling repeatedly to
-/// avoid one control call per observation.
+/// The counter can wrap. Use [`crate::thread::ThreadCounters`] when sampling
+/// repeatedly to avoid one control call per observation.
 ///
 /// # Errors
 ///
@@ -259,8 +346,8 @@ pub fn allocated() -> Result<u64> {
 
 /// Returns the total number of bytes deallocated by the calling thread.
 ///
-/// The counter can wrap. Use [`ThreadCounters`] when sampling repeatedly to
-/// avoid one control call per observation.
+/// The counter can wrap. Use [`crate::thread::ThreadCounters`] when sampling
+/// repeatedly to avoid one control call per observation.
 ///
 /// # Errors
 ///
@@ -271,71 +358,4 @@ pub fn deallocated() -> Result<u64> {
 
 	// SAFETY: `thread.deallocated` has the C output type `uint64_t`.
 	unsafe { raw::get(&key) }
-}
-
-/// Direct access to the calling thread's cumulative byte counters.
-///
-/// Construction performs two MIB calls. Subsequent observations are raw loads
-/// from jemalloc's stable thread-specific counter pointers. The handle is
-/// neither `Send` nor `Sync`, so safe Rust cannot move it away from the thread
-/// whose allocator state it observes.
-#[cfg(feature = "stats")]
-#[derive(Clone, Copy, Debug)]
-pub struct ThreadCounters {
-	/// Jemalloc's current-thread allocated-byte counter.
-	allocated: NonNull<u64>,
-
-	/// Jemalloc's current-thread deallocated-byte counter.
-	deallocated: NonNull<u64>,
-
-	/// Prevents the thread-specific pointers from crossing thread boundaries.
-	not_send_or_sync: PhantomData<*mut ()>,
-}
-
-#[cfg(feature = "stats")]
-impl ThreadCounters {
-	/// Obtains direct counter pointers for the calling thread.
-	///
-	/// # Errors
-	///
-	/// Returns an error if jemalloc rejects either query or returns a null
-	/// pointer.
-	pub fn current() -> Result<Self> {
-		let allocated_key = key::thread_allocatedp()?;
-		let deallocated_key = key::thread_deallocatedp()?;
-
-		// SAFETY: the two controls return pointers to their `uint64_t` counters.
-		let allocated = unsafe { raw::get::<*mut u64>(&allocated_key) }?;
-
-		// SAFETY: this is the distinct deallocated-counter MIB and pointer type.
-		let deallocated = unsafe { raw::get::<*mut u64>(&deallocated_key) }?;
-
-		Ok(Self {
-			allocated: NonNull::new(allocated).ok_or_else(Error::bad_address)?,
-			deallocated: NonNull::new(deallocated).ok_or_else(Error::bad_address)?,
-			not_send_or_sync: PhantomData,
-		})
-	}
-
-	/// Loads the total number of bytes allocated by this thread.
-	///
-	/// The counter can wrap.
-	#[inline]
-	#[must_use]
-	pub fn allocated(&self) -> u64 {
-		// SAFETY: construction validated the current-thread counter pointer, and
-		// the handle cannot cross threads.
-		unsafe { self.allocated.as_ptr().read() }
-	}
-
-	/// Loads the total number of bytes deallocated by this thread.
-	///
-	/// The counter can wrap.
-	#[inline]
-	#[must_use]
-	pub fn deallocated(&self) -> u64 {
-		// SAFETY: construction validated the current-thread counter pointer, and
-		// the handle cannot cross threads.
-		unsafe { self.deallocated.as_ptr().read() }
-	}
 }

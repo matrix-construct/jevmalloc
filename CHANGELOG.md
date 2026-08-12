@@ -7,8 +7,11 @@
 - Replace the generated TikV-style `ctl` option tree with a compact MIB-only
   control interface. Built-in MIBs use process-wide caches.
 - Organize typed allocator operations at crate root and under `arena`, `arenas`,
-  `config`, `opt`, `profiling`, `stats`, and `this_thread`, leaving MIB access
+  `config`, `opt`, `profiling`, `stats`, and `thread`, leaving MIB access
   under `ctl`.
+- Model explicitly created tcaches as lifecycle-owning `thread::ThreadCache`
+  objects. Add calling-thread maximum-size and per-size-class cache controls,
+  while keeping automatic and identifier-based flush commands distinct.
 - Expose all documented `config.*` and `opt.*` values as read-only typed
   getters, along with the documented fixed-name global `stats.*` values that do
   not carry arena or mutex-counter indices.
@@ -17,7 +20,7 @@
   preconditions at the safety boundary.
 - Make statistics refresh explicit through `stats::refresh_epoch`; ordinary
   control reads no longer refresh every arena. Add
-  `this_thread::ThreadCounters`, a thread-confined direct counter handle, instead
+  `thread::ThreadCounters`, a thread-confined direct counter handle, instead
   of exposing allocator-mutated counters through static shared references.
 - Update vendored `jemalloc` to 5.3.1, a 396-commit catch-up over 5.3.0. The
   checked-in `configure` was regenerated from the new `configure.ac`; the option

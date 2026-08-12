@@ -22,4 +22,4 @@ pub use self::{
 ///
 /// A failed operation retains the nonzero status returned by jemalloc. Invalid
 /// names supplied to [`raw::mibs`] are reported as `EINVAL`.
-pub type Result<T = ()> = core::result::Result<T, Error>;
+pub type Result<T = ()> = ::core::result::Result<T, Error>;
