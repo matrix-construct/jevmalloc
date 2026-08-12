@@ -84,6 +84,16 @@ feature, `jevmalloc::this_thread::ThreadCounters` provides repeated direct reads
 of the calling thread's allocation counters without exposing them as immutable
 static references.
 
+Build capabilities and immutable startup options live under
+`jevmalloc::config` and `jevmalloc::opt`. These modules cover every documented
+`config.*` and `opt.*` getter. String-valued controls return borrowed `CStr`
+values so callers can preserve the allocator's bytes without an allocation or
+UTF-8 assumption. Getters that depend on fill, utrace, xmalloc, or profiling
+support return `ENOENT` when that capability was omitted from the jemalloc
+build. A library supplied through `JEMALLOC_OVERRIDE` must match the bundled
+control ABI, including its C boolean representation and the immutable,
+process-lifetime storage used by string controls.
+
 `jevmalloc::ctl::raw` resolves ad hoc names and exposes unsafe generic MIB
 reads, writes, mixed-type updates, exchanges, and commands. Value operations
 require the Rust type to match the selected C control exactly, while commands
@@ -93,7 +103,9 @@ crate-level control when one exists.
 Profiling controls live under `jevmalloc::profiling` with the `profiling`
 feature. Compiling that support does not activate profiling; jemalloc must also
 start with `prof:true` in its allocator configuration. Epoch operations live
-under `jevmalloc::stats`. Counter handles and peak controls live under
+under `jevmalloc::stats`. With the `stats` feature, that module also exposes all
+documented fixed-name global statistics that precede the mutex and arena
+families. Counter handles and peak controls live under
 `jevmalloc::this_thread`, and mutex-statistics reset is present under
 `jevmalloc::stats` with the `stats` feature.
 

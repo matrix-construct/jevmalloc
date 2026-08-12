@@ -4,11 +4,34 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 
-use jevmalloc::{Jemalloc, stats_reset, this_thread};
+use jevmalloc::{Jemalloc, stats, stats_reset, this_thread};
 
 /// Routes test-harness allocations through the observed jemalloc instance.
 #[global_allocator]
 static ALLOC: Jemalloc = Jemalloc;
+
+/// Checks every fixed-name global statistic in one refreshed snapshot.
+#[test]
+fn global_stats_are_readable() {
+	stats::refresh_epoch().unwrap();
+
+	let allocated = stats::allocated().unwrap();
+	let active = stats::active().unwrap();
+	let resident = stats::resident().unwrap();
+	let mapped = stats::mapped().unwrap();
+
+	assert!(active >= allocated);
+	assert!(resident >= active);
+	assert!(mapped >= active);
+
+	stats::metadata().unwrap();
+	stats::metadata_thp().unwrap();
+	stats::retained().unwrap();
+	stats::zero_reallocs().unwrap();
+	stats::background_thread_num_threads().unwrap();
+	stats::background_thread_num_runs().unwrap();
+	stats::background_thread_run_interval().unwrap();
+}
 
 /// Checks direct thread-counter handles and ordinary counter reads.
 #[test]

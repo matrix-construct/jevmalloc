@@ -12,9 +12,9 @@
 //!
 //! [`Jemalloc`] implements [`GlobalAlloc`] and can service the process-wide
 //! `#[global_allocator]` slot. Typed allocator operations are grouped by scope
-//! in [`Arena`], [`arenas`], [`stats`], and [`this_thread`]. The [`ctl`] module
-//! exposes MIB-based control-interface primitives, while [`ffi`] re-exports the
-//! underlying C bindings.
+//! in [`Arena`], [`arenas`], [`config`], [`opt`], [`stats`], and
+//! [`this_thread`]. The [`ctl`] module exposes MIB-based control-interface
+//! primitives, while [`ffi`] re-exports the underlying C bindings.
 //!
 //! ```
 //! #[global_allocator]
@@ -35,8 +35,10 @@
 
 pub mod arena;
 pub mod arenas;
+pub mod config;
 pub mod ctl;
 pub mod global;
+pub mod opt;
 #[cfg(feature = "profiling")]
 pub mod profiling;
 pub mod stats;

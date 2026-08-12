@@ -7,7 +7,11 @@
 - Replace the generated TikV-style `ctl` option tree with a compact MIB-only
   control interface. Built-in MIBs use process-wide caches.
 - Organize typed allocator operations at crate root and under `arena`, `arenas`,
-  `profiling`, `stats`, and `this_thread`, leaving MIB access under `ctl`.
+  `config`, `opt`, `profiling`, `stats`, and `this_thread`, leaving MIB access
+  under `ctl`.
+- Expose all documented `config.*` and `opt.*` values as read-only typed
+  getters, along with the documented fixed-name global `stats.*` values that do
+  not carry arena or mutex-counter indices.
 - Make generic raw MIB operations explicitly unsafe, preserve numeric errno
   values, validate ad hoc names, require exact value sizes, and expose command
   preconditions at the safety boundary.
