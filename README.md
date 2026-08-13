@@ -83,13 +83,14 @@ cache flush.
 
 Epoch refresh is explicit. Ordinary configuration and thread queries read live
 state and do not force a process-wide statistics refresh. `jevmalloc::stats::print`
-streams the report output jemalloc produces to a synchronous byte writer and
-attempts to refresh the epoch as part of that operation. The Rust adapter itself
-performs no allocation, though jemalloc can allocate an internal print buffer.
-For bundled builds, the `stats` feature enables detailed report sections. With
-that feature, `jevmalloc::thread::ThreadCounters` also provides repeated direct
-reads of the calling thread's allocation counters without exposing them as
-immutable static references.
+writes a checked UTF-8 report into caller-owned storage, while
+`jevmalloc::stats::print_raw` streams the exact report bytes to a synchronous
+writer. Both attempt to refresh the epoch as part of that operation. The Rust
+adapters themselves perform no allocation, though jemalloc can allocate an
+internal print buffer. For bundled builds, the `stats` feature enables detailed
+report sections. With that feature, `jevmalloc::thread::ThreadCounters` also
+provides repeated direct reads of the calling thread's allocation counters
+without exposing them as immutable static references.
 
 Build capabilities and immutable startup options live under
 `jevmalloc::config` and `jevmalloc::opt`. These modules cover every documented

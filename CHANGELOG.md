@@ -22,8 +22,10 @@
   control reads no longer refresh every arena. Add
   `thread::ThreadCounters`, a thread-confined direct counter handle, instead
   of exposing allocator-mutated counters through static shared references.
-- Add a safe `stats::print` byte callback API without requiring the optional
-  statistics feature. The Rust adapter itself performs no allocation.
+- Add safe statistics reporting without requiring the optional statistics
+  feature. `stats::print` writes checked UTF-8 into caller-owned storage, while
+  `stats::print_raw` streams exact byte fragments. The Rust adapters themselves
+  perform no allocation.
 - Update vendored `jemalloc` to 5.3.1, a 396-commit catch-up over 5.3.0. The
   checked-in `configure` was regenerated from the new `configure.ac`; the option
   set is purely additive, so no build glue changed.

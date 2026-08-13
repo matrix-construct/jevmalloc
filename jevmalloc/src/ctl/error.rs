@@ -4,11 +4,11 @@ use core::{error, fmt, num::NonZeroI32};
 
 use libc::c_int;
 
-/// A nonzero status returned by jemalloc's control interface.
+/// A nonzero errno-style allocator operation error.
 ///
-/// The status is an errno value such as `ENOENT` or `EINVAL`. Wrapper-side
-/// validation failures use `EINVAL`, so callers can handle invalid ad hoc
-/// control names without a panic.
+/// Statuses returned by jemalloc retain their errno values. Wrapper-side
+/// failures use the same representation, so callers can distinguish invalid
+/// input, insufficient storage, and invalid text without a panic.
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Error(NonZeroI32);
@@ -32,6 +32,14 @@ impl Error {
 	#[inline]
 	pub(crate) fn bad_address() -> Self { Self::from_code(libc::EFAULT) }
 
+	/// Constructs the wrapper's insufficient-space error.
+	#[inline]
+	pub(crate) fn insufficient_space() -> Self { Self::from_code(libc::ENOSPC) }
+
+	/// Constructs the wrapper's invalid-UTF-8 error.
+	#[inline]
+	pub(crate) fn invalid_utf8() -> Self { Self::from_code(libc::EILSEQ) }
+
 	/// Constructs an error from a status known to be nonzero.
 	#[inline]
 	pub(super) fn from_code(code: c_int) -> Self {
@@ -40,13 +48,15 @@ impl Error {
 
 	/// Returns the standard description for a recognized status.
 	fn description(self) -> Option<&'static str> {
-		use libc::{EAGAIN, EFAULT, EINVAL, ENOENT, EPERM};
+		use libc::{EAGAIN, EFAULT, EILSEQ, EINVAL, ENOENT, ENOSPC, EPERM};
 
 		match self.code() {
 			| EAGAIN => Some("Resource temporarily unavailable"),
 			| EFAULT => Some("Bad address"),
+			| EILSEQ => Some("Invalid byte sequence"),
 			| EINVAL => Some("Invalid argument"),
 			| ENOENT => Some("No such entity"),
+			| ENOSPC => Some("Insufficient space"),
 			| EPERM => Some("Operation not permitted"),
 			| _ => None,
 		}

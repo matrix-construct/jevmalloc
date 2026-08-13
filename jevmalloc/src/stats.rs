@@ -6,12 +6,21 @@
 //! sole global value in this interface that jemalloc reads directly rather
 //! than copying into the epoch snapshot.
 
-use core::ffi::{CStr, c_char, c_void};
+use core::{
+	ffi::{CStr, c_char, c_void},
+	str,
+};
 
 use crate::{
-	ctl::{Result, key, raw},
+	ctl::{Error, Result, key, raw},
 	ffi,
 };
+
+/// Every option byte recognized by `malloc_stats_print`.
+const PRINT_OPTIONS: &[u8; 10] = b"Jgmdablxeh";
+
+/// Storage for every recognized option followed by its NUL terminator.
+const PRINT_OPTIONS_CAPACITY: usize = PRINT_OPTIONS.len() + 1;
 
 /// Returns the current jemalloc statistics epoch without refreshing it.
 ///
@@ -44,6 +53,97 @@ pub fn refresh_epoch() -> Result<u64> {
 	unsafe { raw::xchg(&key, &0_u64) }
 }
 
+/// Prints an allocator statistics report into the supplied buffer as UTF-8.
+///
+/// `opts` accepts the same single-character options as [`print_raw`]. Unknown
+/// characters are ignored. This Rust adapter performs no allocation, though
+/// jemalloc can allocate an internal print buffer. If jemalloc cannot refresh
+/// its epoch, its C interface can produce no output without returning an error;
+/// this function then returns an empty string.
+///
+/// # Errors
+///
+/// Returns `EINVAL` if `opts` contains a NUL, `ENOSPC` if `buf` cannot hold the
+/// complete report, or `EILSEQ` if the report is not valid UTF-8. Use
+/// [`print_raw`] when the original bytes are required.
+pub fn print<'buf>(opts: &str, buf: &'buf mut [u8]) -> Result<&'buf str> {
+	let mut opts_buf = [0_u8; PRINT_OPTIONS_CAPACITY];
+	let opts = normalize_options(opts, &mut opts_buf)?;
+	let mut output = PrintBuffer::new(buf);
+
+	print_raw(opts, |fragment| output.write(fragment));
+	output.finish()
+}
+
+/// Converts Rust print options into a bounded C string without allocating.
+fn normalize_options<'buf>(
+	opts: &str,
+	buf: &'buf mut [u8; PRINT_OPTIONS_CAPACITY],
+) -> Result<&'buf CStr> {
+	let mut len = 0;
+
+	for option in opts.bytes() {
+		if option == 0 {
+			return Err(Error::invalid_argument());
+		}
+
+		if PRINT_OPTIONS.contains(&option) && !buf[..len].contains(&option) {
+			buf[len] = option;
+			len += 1;
+		}
+	}
+
+	// SAFETY: recognized options are nonzero bytes, `buf[len]` retains its
+	// initialized zero, and the returned slice ends at that first NUL.
+	Ok(unsafe { CStr::from_bytes_with_nul_unchecked(&buf[..=len]) })
+}
+
+/// Collects callback fragments into one caller-owned output buffer.
+struct PrintBuffer<'buf> {
+	/// Storage supplied by the caller.
+	buf: &'buf mut [u8],
+
+	/// Number of report bytes copied into `buf`.
+	len: usize,
+
+	/// Whether a complete callback fragment did not fit.
+	overflowed: bool,
+}
+
+impl<'buf> PrintBuffer<'buf> {
+	/// Starts an empty report in `buf`.
+	fn new(buf: &'buf mut [u8]) -> Self { Self { buf, len: 0, overflowed: false } }
+
+	/// Appends one complete jemalloc callback fragment when it fits.
+	fn write(&mut self, fragment: &[u8]) {
+		if self.overflowed {
+			return;
+		}
+
+		let Some(end) = self.len.checked_add(fragment.len()) else {
+			self.overflowed = true;
+			return;
+		};
+		let Some(output) = self.buf.get_mut(self.len..end) else {
+			self.overflowed = true;
+			return;
+		};
+
+		output.copy_from_slice(fragment);
+		self.len = end;
+	}
+
+	/// Validates and returns the complete buffered report.
+	fn finish(self) -> Result<&'buf str> {
+		if self.overflowed {
+			return Err(Error::insufficient_space());
+		}
+
+		let Self { buf, len, .. } = self;
+		str::from_utf8(&buf[..len]).map_err(|_| Error::invalid_utf8())
+	}
+}
+
 /// Prints an allocator statistics report through the supplied writer.
 ///
 /// Jemalloc invokes `write` synchronously with arbitrary byte fragments and
@@ -56,7 +156,7 @@ pub fn refresh_epoch() -> Result<u64> {
 /// the `stats` feature enables detailed report sections. A panic in `write`
 /// aborts the process at the C callback boundary. Unknown option bytes are
 /// ignored.
-pub fn print<F>(opts: &CStr, mut write: F)
+pub fn print_raw<F>(opts: &CStr, mut write: F)
 where
 	F: FnMut(&[u8]),
 {
@@ -69,13 +169,13 @@ where
 
 /// Forwards one C writer fragment to the live Rust callback.
 ///
-/// [`print`] supplies both pointers and keeps the callback uniquely borrowed
-/// until jemalloc returns.
+/// [`print_raw`] supplies both pointers and keeps the callback uniquely
+/// borrowed until jemalloc returns.
 unsafe extern "C" fn write_fragment<F>(opaque: *mut c_void, fragment: *const c_char)
 where
 	F: FnMut(&[u8]),
 {
-	// SAFETY: `print` passes a live, uniquely borrowed `F` for the duration of
+	// SAFETY: `print_raw` passes a live, uniquely borrowed `F` for the duration of
 	// the synchronous call.
 	let write = unsafe { &mut *opaque.cast::<F>() };
 
@@ -277,7 +377,7 @@ pub fn stats_reset() -> Result {
 
 #[cfg(test)]
 mod tests {
-	//! Checks the byte-preserving callback boundary.
+	//! Checks checked buffering and the byte-preserving callback boundary.
 
 	extern crate std as rust_std;
 
@@ -312,5 +412,51 @@ mod tests {
 		}
 
 		assert_eq!(output, [0xFF, 0xC3, 0xA9]);
+	}
+
+	/// Validates UTF-8 after joining fragments at arbitrary byte boundaries.
+	#[test]
+	fn buffer_accepts_split_utf8() {
+		let mut storage = [0_u8; 2];
+		let mut output = PrintBuffer::new(&mut storage);
+
+		output.write(&[0xC3]);
+		output.write(&[0xA9]);
+
+		assert_eq!(output.finish().unwrap(), "\u{e9}");
+	}
+
+	/// Rejects output bytes that do not form valid UTF-8.
+	#[test]
+	fn buffer_rejects_invalid_utf8() {
+		let mut storage = [0_u8; 1];
+		let mut output = PrintBuffer::new(&mut storage);
+
+		output.write(&[0xFF]);
+
+		assert!(output.finish().unwrap_err().is(libc::EILSEQ));
+	}
+
+	/// Rejects a report that does not fit completely in caller storage.
+	#[test]
+	fn buffer_rejects_insufficient_space() {
+		let mut storage = [0_u8; 2];
+		let mut output = PrintBuffer::new(&mut storage);
+
+		output.write(b"abc");
+
+		assert!(output.finish().unwrap_err().is(libc::ENOSPC));
+	}
+
+	/// Retains each recognized option once and rejects embedded NULs.
+	#[test]
+	fn options_are_bounded_and_nul_free() {
+		let mut storage = [0_u8; PRINT_OPTIONS_CAPACITY];
+		let opts = normalize_options("x?Jx\u{e9}", &mut storage).unwrap();
+
+		assert_eq!(opts.to_bytes(), b"xJ");
+
+		let error = normalize_options("g\0m", &mut storage).unwrap_err();
+		assert!(error.is(libc::EINVAL));
 	}
 }
