@@ -1,4 +1,4 @@
-//! Statistics snapshot and reset controls.
+//! Statistics reporting, snapshots, and reset controls.
 //!
 //! Global statistics are cached by jemalloc. Call [`refresh_epoch`] before
 //! reading a related set when a fresh, internally comparable snapshot is
@@ -6,7 +6,12 @@
 //! sole global value in this interface that jemalloc reads directly rather
 //! than copying into the epoch snapshot.
 
-use crate::ctl::{Result, key, raw};
+use core::ffi::{CStr, c_char, c_void};
+
+use crate::{
+	ctl::{Result, key, raw},
+	ffi,
+};
 
 /// Returns the current jemalloc statistics epoch without refreshing it.
 ///
@@ -37,6 +42,48 @@ pub fn refresh_epoch() -> Result<u64> {
 
 	// SAFETY: `epoch` has the C type `uint64_t` for input and output.
 	unsafe { raw::xchg(&key, &0_u64) }
+}
+
+/// Prints an allocator statistics report through the supplied writer.
+///
+/// Jemalloc invokes `write` synchronously with arbitrary byte fragments and
+/// attempts to refresh its cached statistics before printing. If that refresh
+/// cannot allocate, jemalloc reports the failure through its global message
+/// callback and can invoke `write` zero times; the C interface provides no
+/// error status. Fragments can contain invalid UTF-8 or split a multibyte
+/// encoding at a buffering boundary. This Rust adapter performs no allocation,
+/// though jemalloc can allocate an internal print buffer. For bundled builds,
+/// the `stats` feature enables detailed report sections. A panic in `write`
+/// aborts the process at the C callback boundary. Unknown option bytes are
+/// ignored.
+pub fn print<F>(opts: &CStr, mut write: F)
+where
+	F: FnMut(&[u8]),
+{
+	let opaque = (&raw mut write).cast::<c_void>();
+
+	// SAFETY: `write_fragment` receives the live callback pointer above only
+	// during this synchronous call, and `opts` is NUL-terminated.
+	unsafe { ffi::malloc_stats_print(Some(write_fragment::<F>), opaque, opts.as_ptr()) };
+}
+
+/// Forwards one C writer fragment to the live Rust callback.
+///
+/// [`print`] supplies both pointers and keeps the callback uniquely borrowed
+/// until jemalloc returns.
+unsafe extern "C" fn write_fragment<F>(opaque: *mut c_void, fragment: *const c_char)
+where
+	F: FnMut(&[u8]),
+{
+	// SAFETY: `print` passes a live, uniquely borrowed `F` for the duration of
+	// the synchronous call.
+	let write = unsafe { &mut *opaque.cast::<F>() };
+
+	// SAFETY: jemalloc supplies a non-null, NUL-terminated fragment that remains
+	// live for this callback invocation.
+	let fragment = unsafe { CStr::from_ptr(fragment) };
+
+	write(fragment.to_bytes());
 }
 
 /// Returns the number of bytes currently allocated by the application.
@@ -226,4 +273,44 @@ pub fn stats_reset() -> Result {
 
 	// SAFETY: this MIB selects only the mutex-statistics reset command.
 	unsafe { raw::notify(&key) }
+}
+
+#[cfg(test)]
+mod tests {
+	//! Checks the byte-preserving callback boundary.
+
+	extern crate std as rust_std;
+
+	use rust_std::vec::Vec;
+
+	use super::*;
+
+	/// Invokes the raw trampoline with one validated C fragment.
+	fn forward<F>(write: &mut F, fragment: &[u8])
+	where
+		F: FnMut(&[u8]),
+	{
+		let fragment = CStr::from_bytes_with_nul(fragment).unwrap();
+		let opaque = (&raw mut *write).cast::<c_void>();
+
+		// SAFETY: `opaque` points to the live callback above, and `fragment` is
+		// NUL-terminated for this invocation.
+		unsafe { write_fragment::<F>(opaque, fragment.as_ptr()) };
+	}
+
+	/// Preserves invalid bytes and split encodings without interpreting them.
+	#[test]
+	fn writer_forwards_exact_bytes() {
+		let mut output = Vec::new();
+		{
+			let mut write = |fragment: &[u8]| output.extend_from_slice(fragment);
+			let fragments = [[0xFF_u8, 0], [0xC3, 0], [0xA9, 0]];
+
+			for fragment in &fragments {
+				forward(&mut write, fragment);
+			}
+		}
+
+		assert_eq!(output, [0xFF, 0xC3, 0xA9]);
+	}
 }

@@ -72,6 +72,26 @@ fn epoch_refresh_is_explicit() {
 	assert_eq!(after, refreshed);
 }
 
+/// Checks safe statistics printing without the optional statistics feature.
+#[test]
+fn statistics_print_uses_the_writer() {
+	let _guard = CONTROL.lock().unwrap();
+	let mut output = Vec::new();
+
+	stats::print(c"gmdablxeh", |fragment| output.extend_from_slice(fragment));
+
+	let terminal = [
+		[b'-'; 3].as_slice(),
+		b" End jemalloc statistics ".as_slice(),
+		[b'-'; 3].as_slice(),
+		b"\n".as_slice(),
+	]
+	.concat();
+
+	assert!(output.starts_with(b"___ Begin jemalloc statistics ___\n"));
+	assert!(output.ends_with(&terminal));
+}
+
 /// Checks the global arena queries and the documented affinity predicates.
 #[test]
 fn arena_queries_are_consistent() {

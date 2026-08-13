@@ -137,16 +137,16 @@ unsafe extern "C" {
 	/// General information that never changes during execution can be omitted
 	/// by specifying `g` as a character within the opts string.
 	///
-	/// Note that [`malloc_message`] uses the `mallctl*` functions internally,
-	/// so inconsistent statistics can be reported if multiple threads use these
+	/// The print operation uses the `mallctl*` functions internally, so
+	/// inconsistent statistics can be reported if multiple threads use these
 	/// functions simultaneously.
 	///
 	/// If the Cargo feature `stats` is enabled, `m`, `d`, and `a` can be
 	/// specified to omit merged arena, destroyed merged arena, and per arena
 	/// statistics, respectively; `b` and `l` can be specified to omit per size
-	/// class statistics for bins and large objects, respectively; `x` can be
-	/// specified to omit all mutex statistics. Unrecognized characters are
-	/// silently ignored.
+	/// class statistics for bins and large objects, respectively. The `e`, `h`,
+	/// and `x` options omit extent, HPA, and mutex statistics. Unrecognized
+	/// characters are silently ignored.
 	///
 	/// Note that thread caching may prevent some statistics from being
 	/// completely up to date, since extra locking would be required to merge
