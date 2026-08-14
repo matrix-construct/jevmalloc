@@ -28,6 +28,22 @@ use libc::{c_int, c_void};
 use self::layout::{adjust_layout, layout_flags};
 use super::{Jemalloc, ffi, ffi::MALLOCX_ZERO};
 
+/// Allows the allocator handle to move between threads.
+///
+/// `Jemalloc` contains no instance state or thread affinity. Every operation
+/// delegates to jemalloc's process-wide allocator.
+// SAFETY: `Jemalloc` has no thread-bound state, so moving the zero-sized
+// handle cannot invalidate data or synchronization invariants.
+unsafe impl Send for Jemalloc {}
+
+/// Allows shared allocator handles to service concurrent threads.
+///
+/// Concurrent calls use jemalloc's process-wide synchronization. Optional
+/// hooks must satisfy their documented concurrency contract.
+// SAFETY: shared references expose no mutable instance state, and jemalloc's
+// process-wide allocator entry points support concurrent calls.
+unsafe impl Sync for Jemalloc {}
+
 /// Routes Rust's global allocation operations through jemalloc.
 ///
 /// Each entry point adapts a nonzero Rust layout to the platform allocation
@@ -49,6 +65,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 	///
 	/// The caller must uphold [`GlobalAlloc::alloc`]'s contract, including its
 	/// nonzero-size requirement.
+	#[inline(always)]
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		#[cfg(feature = "global_hooks")]
 		if let Some(hook) = {
@@ -85,6 +102,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 	///
 	/// The caller must uphold [`GlobalAlloc::alloc_zeroed`]'s contract,
 	/// including its nonzero-size requirement.
+	#[inline(always)]
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
 		#[cfg(feature = "global_hooks")]
 		if let Some(hook) = {
@@ -122,6 +140,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 	/// particular, `ptr` and `layout` must describe a live allocation from
 	/// this allocator, and `new_size` must be nonzero and valid for
 	/// `layout.align()`.
+	#[inline(always)]
 	unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
 		#[cfg(feature = "global_hooks")]
 		if let Some(hook) = {
@@ -162,6 +181,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 	/// The caller must uphold [`GlobalAlloc::dealloc`]'s contract. The pointer
 	/// must be non-null and must identify a live allocation created by this
 	/// allocator for the supplied layout.
+	#[inline(always)]
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
 		#[cfg(feature = "global_hooks")]
 		if let Some(hook) = {
