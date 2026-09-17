@@ -252,6 +252,13 @@ fn main() {
 		cmd.arg("--with-lg-page=14");
 	}
 
+	if target.contains("openbsd") {
+		// OpenBSD declares `sbrk` with an `int` increment, which truncates the
+		// size jemalloc falls back to when a mapping is refused. The allocation
+		// then succeeds over a break moved by only the truncated amount.
+		cmd.arg("--disable-dss");
+	}
+
 	// collect `malloc_conf` string:
 	let mut malloc_conf = String::new();
 	if let Ok(malloc_conf_opts) = read_and_watch_env("JEMALLOC_SYS_WITH_MALLOC_CONF") {
