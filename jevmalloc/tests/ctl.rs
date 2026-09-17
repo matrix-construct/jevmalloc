@@ -54,7 +54,8 @@ fn raw_mib_access() {
 	// SAFETY: the same complete MIB accepts `CBool` as its C input type.
 	unsafe { ctl::raw::set(&cache_key, &cache) }.unwrap();
 
-	// SAFETY: this is the complete cache-setting MIB with C output type `CBool`.
+	// SAFETY: this is the complete cache-setting MIB with C output type
+	// `CBool`.
 	let after = unsafe { ctl::raw::get::<CBool>(&cache_key) }.unwrap();
 
 	assert_eq!(after, cache);

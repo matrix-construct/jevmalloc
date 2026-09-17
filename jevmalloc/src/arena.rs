@@ -72,8 +72,9 @@ impl Arena {
 	pub fn create() -> Result<Self> {
 		let key = key::arenas_create()?;
 
-		// SAFETY: `arenas.create` with no input creates one default-hook arena and
-		// writes its `unsigned` index. The new owner records that lifecycle.
+		// SAFETY: `arenas.create` with no input creates one default-hook arena
+		// and writes its `unsigned` index. The new owner records that
+		// lifecycle.
 		let index = unsafe { raw::get::<c_uint>(&key) }?;
 
 		Self::from_created_index(index)
@@ -100,8 +101,8 @@ impl Arena {
 	) -> Result<Self> {
 		let hooks = hooks.as_raw();
 
-		// SAFETY: the static stateful table preserves the raw header's address. The
-		// caller guarantees every callback contract.
+		// SAFETY: the static stateful table preserves the raw header's address.
+		// The caller guarantees every callback contract.
 		unsafe { Self::create_with_raw_extent_hooks(hooks) }
 	}
 
@@ -131,8 +132,9 @@ impl Arena {
 		let key = key::arenas_create()?;
 		let hooks = hooks.as_ptr();
 
-		// SAFETY: `arenas.create` accepts an `extent_hooks_t *` input and writes
-		// an `unsigned` index. The pointer satisfies its process-lifetime contract.
+		// SAFETY: `arenas.create` accepts an `extent_hooks_t *` input and
+		// writes an `unsigned` index. The pointer satisfies its
+		// process-lifetime contract.
 		let index = unsafe { raw::update::<_, c_uint>(&key, &hooks) }?;
 
 		Self::from_created_index(index)
@@ -197,7 +199,8 @@ impl Arena {
 		let index = thread::this::arena_id()?;
 
 		// SAFETY: the current thread's association pins a manual arena against
-		// destruction. Any unsafe reassignment must account for handles it unpins.
+		// destruction. Any unsafe reassignment must account for handles it
+		// unpins.
 		unsafe { Self::from_index(index) }
 	}
 
@@ -224,8 +227,9 @@ impl Arena {
 		// its owning arena as an `unsigned` index.
 		let index = unsafe { raw::update::<_, c_uint>(&key, &allocation) }?;
 
-		// SAFETY: the caller guarantees that the allocation keeps its arena live
-		// and synchronizes the returned handle with lifecycle operations.
+		// SAFETY: the caller guarantees that the allocation keeps its arena
+		// live and synchronizes the returned handle with lifecycle
+		// operations.
 		unsafe {
 			Self::from_index(usize::try_from(index).map_err(|_| Error::invalid_argument())?)
 		}
@@ -272,7 +276,8 @@ impl Arena {
 	/// handles and operations involving either association must remain
 	/// synchronized with reset, destruction, and index recycling.
 	pub unsafe fn set_current(&self) -> Result<Self> {
-		// SAFETY: the caller accepts the allocation and cache lifetime contract.
+		// SAFETY: the caller accepts the allocation and cache lifetime
+		// contract.
 		let previous = unsafe { thread::this::set_arena(self.index) }?;
 
 		// SAFETY: the caller accepts responsibility for the previous arena's
@@ -355,7 +360,8 @@ impl Arena {
 		let mut name_ptr = name.as_mut_ptr();
 
 		// SAFETY: `arena.<i>.name` expects an initialized `char *` output slot
-		// pointing to a writable 32-byte buffer. `ArenaName` supplies that buffer.
+		// pointing to a writable 32-byte buffer. `ArenaName` supplies that
+		// buffer.
 		unsafe { raw::get_in_place(&key, &mut name_ptr) }?;
 
 		Ok(name)
@@ -374,7 +380,8 @@ impl Arena {
 		let name = name.as_ptr();
 
 		// SAFETY: `arena.<i>.name` accepts a non-null `char *` input. Jemalloc
-		// copies from the terminated string during this call and retains no pointer.
+		// copies from the terminated string during this call and retains no
+		// pointer.
 		unsafe { raw::set(&key, &name) }
 	}
 
@@ -508,7 +515,8 @@ impl Arena {
 	pub fn set_retain_grow_limit(&self, limit: usize) -> Result<usize> {
 		let key = self.select(key::arena_retain_grow_limit()?);
 
-		// SAFETY: `arena.<i>.retain_grow_limit` uses `size_t` for input and output.
+		// SAFETY: `arena.<i>.retain_grow_limit` uses `size_t` for input and
+		// output.
 		unsafe { raw::xchg(&key, &limit) }
 	}
 
@@ -555,8 +563,8 @@ impl Arena {
 	) -> Result<NonNull<RawExtentHooks>> {
 		let hooks = hooks.as_raw();
 
-		// SAFETY: the caller guarantees that the static replacement handles every
-		// extant extent and satisfies all callback requirements.
+		// SAFETY: the caller guarantees that the static replacement handles
+		// every extant extent and satisfies all callback requirements.
 		unsafe { self.set_raw_extent_hooks(hooks) }
 	}
 
@@ -664,9 +672,9 @@ impl Arena {
 impl Drop for Arena {
 	fn drop(&mut self) {
 		if self.owned {
-			// SAFETY: safe code can create only an empty default-hook arena. Every
-			// operation that can violate destruction requirements is unsafe and
-			// carries the corresponding caller contract.
+			// SAFETY: safe code can create only an empty default-hook arena.
+			// Every operation that can violate destruction requirements is
+			// unsafe and carries the corresponding caller contract.
 			let _: Result = unsafe { self.destroy() };
 		}
 	}

@@ -385,17 +385,17 @@ fn main() {
 	if !target.contains("windows") && !target.contains("android") {
 		println!("cargo:rustc-link-arg=-pthread");
 	}
-	// GCC may generate a __atomic_exchange_1 library call which requires -latomic
-	// during the final linking. https://github.com/riscv-collab/riscv-gcc/issues/12
+	// GCC may generate a __atomic_exchange_1 library call which requires
+	// -latomic during the final linking. https://github.com/riscv-collab/riscv-gcc/issues/12
 	if target.contains("riscv") {
 		println!("cargo:rustc-link-lib=atomic");
 	}
 	println!("cargo:rerun-if-changed=jemalloc");
 
 	if target.contains("android") {
-		// These symbols are used by jemalloc on android but the really old android
-		// we're building on doesn't have them defined, so just make sure the symbols
-		// are available.
+		// These symbols are used by jemalloc on android but the really old
+		// android we're building on doesn't have them defined, so just make
+		// sure the symbols are available.
 		cc::Build::new()
 			.file("src/pthread_atfork.c")
 			.compile("pthread_atfork");
@@ -544,7 +544,8 @@ fn copy_recursively(src: &Path, dst: &Path) -> io::Result<()> {
 		let entry = entry?;
 		let ft = entry.file_type()?;
 		if ft.is_dir() {
-			// There should be very few layer in the project, use recusion to keep simple.
+			// There should be very few layer in the project, use recusion to
+			// keep simple.
 			copy_recursively(&entry.path(), &dst.join(entry.file_name()))?;
 		} else {
 			fs::copy(entry.path(), dst.join(entry.file_name()))?;

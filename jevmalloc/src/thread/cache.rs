@@ -89,8 +89,9 @@ impl ThreadCache {
 		let key = key::tcache_flush()?;
 		let index = validated_index(self.index)?;
 
-		// SAFETY: this owner supplies the live cache's `unsigned` identifier and
-		// the mutable borrow excludes another safe operation on the handle.
+		// SAFETY: this owner supplies the live cache's `unsigned` identifier
+		// and the mutable borrow excludes another safe operation on the
+		// handle.
 		unsafe { raw::set(&key, &index) }
 	}
 

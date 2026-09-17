@@ -592,8 +592,8 @@ unsafe fn range<State: 'static>(
 		arena,
 	};
 
-	// SAFETY: jemalloc supplied a valid range and the callback owns the selected
-	// operation's contract.
+	// SAFETY: jemalloc supplied a valid range and the callback owns the
+	// selected operation's contract.
 	let result = unsafe { callback(&hooks.state, range) };
 
 	to_bool(result == ExtentHookResult::Failure)
@@ -657,8 +657,8 @@ unsafe extern "C" fn merge<State: 'static>(
 		arena,
 	};
 
-	// SAFETY: jemalloc supplied valid adjacent extents and the callback owns the
-	// merge contract.
+	// SAFETY: jemalloc supplied valid adjacent extents and the callback owns
+	// the merge contract.
 	let result = unsafe { callback(&hooks.state, merge) };
 
 	to_bool(result == ExtentHookResult::Failure)

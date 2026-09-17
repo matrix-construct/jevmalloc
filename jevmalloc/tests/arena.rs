@@ -272,8 +272,8 @@ fn destruction_failure_retains_owner() {
 	assert!(error.is(libc::EFAULT));
 	assert!(arena.is_owned());
 
-	// SAFETY: the thread moved away, its cache was flushed, and the arena has no
-	// allocations or concurrent users.
+	// SAFETY: the thread moved away, its cache was flushed, and the arena has
+	// no allocations or concurrent users.
 	unsafe { arena.try_destroy() }.unwrap();
 }
 
@@ -284,8 +284,8 @@ fn raw_extent_hooks_at_creation() {
 	let seed = Arena::create().unwrap();
 	let hooks = seed.extent_hooks().unwrap();
 
-	// SAFETY: a default arena reports jemalloc's immutable process-lifetime hook
-	// table, whose callbacks satisfy the allocator's own contracts.
+	// SAFETY: a default arena reports jemalloc's immutable process-lifetime
+	// hook table, whose callbacks satisfy the allocator's own contracts.
 	let arena = unsafe { Arena::create_with_raw_extent_hooks(hooks) }.unwrap();
 	assert_eq!(arena.extent_hooks().unwrap(), hooks);
 
@@ -316,7 +316,8 @@ fn typed_extent_hooks_at_creation() {
 		.store(0, Ordering::Relaxed);
 	let flags = arena.flags() | ffi::MALLOCX_TCACHE_NONE;
 
-	// SAFETY: the size is nonzero, the arena is live, and the tcache is bypassed.
+	// SAFETY: the size is nonzero, the arena is live, and the tcache is
+	// bypassed.
 	let allocation = unsafe { ffi::mallocx(8 * 1024 * 1024, flags) };
 	let allocation = NonNull::new(allocation).expect("typed-hook allocation failed");
 	assert!(
@@ -360,7 +361,8 @@ fn typed_extent_hooks_at_replacement() {
 		.store(0, Ordering::Relaxed);
 	let flags = arena.flags() | ffi::MALLOCX_TCACHE_NONE;
 
-	// SAFETY: the size is nonzero, the arena is live, and the tcache is bypassed.
+	// SAFETY: the size is nonzero, the arena is live, and the tcache is
+	// bypassed.
 	let allocation = unsafe { ffi::mallocx(8 * 1024 * 1024, flags) };
 	let allocation = NonNull::new(allocation).expect("replacement-hook allocation failed");
 	assert!(

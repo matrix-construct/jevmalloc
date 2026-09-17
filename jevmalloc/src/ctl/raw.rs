@@ -189,8 +189,8 @@ pub unsafe fn set<T>(key: &Key, value: &T) -> Result {
 
 	// SAFETY: the caller supplies an exact writable MIB and its exact C input
 	// type. `value` is aligned, readable, and live for the call, and jemalloc
-	// treats this shared input slot as read-only. Any contained pointer satisfies
-	// the control-specific pointee and retention obligations.
+	// treats this shared input slot as read-only. Any contained pointer
+	// satisfies the control-specific pointee and retention obligations.
 	let status = unsafe {
 		ffi::mallctlbymib(
 			key.as_ptr(),

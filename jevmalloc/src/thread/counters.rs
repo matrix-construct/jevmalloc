@@ -35,10 +35,12 @@ impl ThreadCounters {
 		let allocated_key = key::thread_allocatedp()?;
 		let deallocated_key = key::thread_deallocatedp()?;
 
-		// SAFETY: the two controls return pointers to their `uint64_t` counters.
+		// SAFETY: the two controls return pointers to their `uint64_t`
+		// counters.
 		let allocated = unsafe { raw::get::<*mut u64>(&allocated_key) }?;
 
-		// SAFETY: this is the distinct deallocated-counter MIB and pointer type.
+		// SAFETY: this is the distinct deallocated-counter MIB and pointer
+		// type.
 		let deallocated = unsafe { raw::get::<*mut u64>(&deallocated_key) }?;
 
 		Ok(Self {
@@ -54,8 +56,8 @@ impl ThreadCounters {
 	#[inline]
 	#[must_use]
 	pub fn allocated(&self) -> u64 {
-		// SAFETY: construction validated the current-thread counter pointer, and
-		// the handle cannot cross threads.
+		// SAFETY: construction validated the current-thread counter pointer,
+		// and the handle cannot cross threads.
 		unsafe { self.allocated.as_ptr().read() }
 	}
 
@@ -65,8 +67,8 @@ impl ThreadCounters {
 	#[inline]
 	#[must_use]
 	pub fn deallocated(&self) -> u64 {
-		// SAFETY: construction validated the current-thread counter pointer, and
-		// the handle cannot cross threads.
+		// SAFETY: construction validated the current-thread counter pointer,
+		// and the handle cannot cross threads.
 		unsafe { self.deallocated.as_ptr().read() }
 	}
 }

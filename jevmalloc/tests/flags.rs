@@ -153,8 +153,8 @@ fn allocations_are_aligned_on_both_branches() {
 		assert!(!ptr.is_null(), "{layout:?} flags {flags} failed to allocate");
 		let aligned = ptr.addr().is_multiple_of(layout.align());
 
-		// SAFETY: the live allocation contains at least `layout.size()` writable
-		// bytes.
+		// SAFETY: the live allocation contains at least `layout.size()`
+		// writable bytes.
 		unsafe { ptr.write_bytes(0xA5, layout.size()) };
 
 		// SAFETY: `ptr` remains live and was created with this exact layout.
@@ -176,8 +176,8 @@ fn fragment_allocations_round_trip() {
 		assert!(!ptr.is_null(), "{layout:?} failed to allocate");
 		let allocated_aligned = ptr.addr().is_multiple_of(layout.align());
 
-		// SAFETY: the live allocation contains at least `layout.size()` writable
-		// bytes.
+		// SAFETY: the live allocation contains at least `layout.size()`
+		// writable bytes.
 		unsafe { ptr.write_bytes(0xA5, layout.size()) };
 		let size = layout.size() + 1;
 
@@ -192,7 +192,8 @@ fn fragment_allocations_round_trip() {
 
 		let grown_aligned = grown.addr().is_multiple_of(layout.align());
 
-		// SAFETY: successful reallocation returned at least `size` writable bytes.
+		// SAFETY: successful reallocation returned at least `size` writable
+		// bytes.
 		unsafe { grown.write_bytes(0x5A, size) };
 
 		let layout = Layout::from_size_align(size, layout.align()).unwrap();
@@ -218,7 +219,8 @@ fn zeroed_allocations_are_aligned_and_zero_on_both_branches() {
 		assert!(!ptr.is_null(), "{layout:?} flags {flags} failed to allocate");
 		let aligned = ptr.addr().is_multiple_of(layout.align());
 
-		// SAFETY: the live allocation contains `layout.size()` initialized bytes.
+		// SAFETY: the live allocation contains `layout.size()` initialized
+		// bytes.
 		let bytes = unsafe { slice::from_raw_parts(ptr, layout.size()) };
 		let zeroed = bytes.iter().all(|byte| *byte == 0);
 
@@ -244,11 +246,12 @@ fn reallocations_are_aligned_on_both_branches() {
 			let ptr = unsafe { Jemalloc.alloc(layout) };
 			assert!(!ptr.is_null(), "{layout:?} flags {flags} failed to allocate");
 
-			// SAFETY: `ptr` is live from this allocator, and `size` is nonzero and
-			// valid for the original alignment.
+			// SAFETY: `ptr` is live from this allocator, and `size` is nonzero
+			// and valid for the original alignment.
 			let resized = unsafe { Jemalloc.realloc(ptr, layout, size) };
 			if resized.is_null() {
-				// SAFETY: failed reallocation leaves the original allocation live.
+				// SAFETY: failed reallocation leaves the original allocation
+				// live.
 				unsafe { Jemalloc.dealloc(ptr, layout) };
 				panic!("{layout:?} -> {size} flags {flags} failed to reallocate");
 			}
@@ -301,7 +304,8 @@ fn assert_failure_returns_null(failed: Layout) {
 	// SAFETY: `failed` is valid and nonzero.
 	let allocated = unsafe { Jemalloc.alloc(failed) };
 	if !allocated.is_null() {
-		// SAFETY: the unexpected success returned a live allocation for `failed`.
+		// SAFETY: the unexpected success returned a live allocation for
+		// `failed`.
 		unsafe { Jemalloc.dealloc(allocated, failed) };
 	}
 	assert!(allocated.is_null(), "alloc({size}) unexpectedly succeeded");
@@ -309,7 +313,8 @@ fn assert_failure_returns_null(failed: Layout) {
 	// SAFETY: `failed` is valid and nonzero.
 	let zeroed = unsafe { Jemalloc.alloc_zeroed(failed) };
 	if !zeroed.is_null() {
-		// SAFETY: the unexpected success returned a live allocation for `failed`.
+		// SAFETY: the unexpected success returned a live allocation for
+		// `failed`.
 		unsafe { Jemalloc.dealloc(zeroed, failed) };
 	}
 	assert!(zeroed.is_null(), "alloc_zeroed({size}) unexpectedly succeeded");

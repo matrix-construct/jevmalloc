@@ -26,8 +26,9 @@ impl ArenaName {
 	/// allocation or encoding conversion.
 	#[must_use]
 	pub fn as_c_str(&self) -> &CStr {
-		// SAFETY: construction initializes the buffer with zeros, and jemalloc's
-		// name getter preserves a terminator in its fixed-size destination.
+		// SAFETY: construction initializes the buffer with zeros, and
+		// jemalloc's name getter preserves a terminator in its fixed-size
+		// destination.
 		unsafe { CStr::from_ptr(self.0.as_ptr()) }
 	}
 

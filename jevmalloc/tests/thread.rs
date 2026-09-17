@@ -106,8 +106,8 @@ fn explicit_cache_lifecycle() {
 fn allocate_and_deallocate(cache: &ThreadCache) {
 	let flags = cache.flags();
 
-	// SAFETY: the request is nonzero, `cache` owns the selected live tcache, and
-	// this test serializes every use of that cache.
+	// SAFETY: the request is nonzero, `cache` owns the selected live tcache,
+	// and this test serializes every use of that cache.
 	let allocation = unsafe { ffi::mallocx(64, flags) };
 	assert!(!allocation.is_null());
 

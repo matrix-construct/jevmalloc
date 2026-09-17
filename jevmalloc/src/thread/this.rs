@@ -191,8 +191,8 @@ pub fn set_tcache_max(max: usize) -> Result<usize> {
 pub fn tcache_ncached_max(size_class: usize) -> Result<usize> {
 	let key = key::thread_tcache_ncached_max_read_sizeclass()?;
 
-	// SAFETY: this control accepts one `size_t` size-class input and returns one
-	// `size_t` object-count output.
+	// SAFETY: this control accepts one `size_t` size-class input and returns
+	// one `size_t` object-count output.
 	unsafe { raw::update(&key, &size_class) }
 }
 
@@ -224,8 +224,8 @@ pub fn set_tcache_ncached_max(settings: &CStr) -> Result {
 	let settings = buffer.as_mut_ptr().cast::<c_char>();
 
 	// SAFETY: the control's C input is a `char *` value. It scans at most the
-	// full live `buffer`, finds the copied terminator, parses synchronously, and
-	// retains no pointer.
+	// full live `buffer`, finds the copied terminator, parses synchronously,
+	// and retains no pointer.
 	unsafe { raw::set(&key, &settings) }
 }
 

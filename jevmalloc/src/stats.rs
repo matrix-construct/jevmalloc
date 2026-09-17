@@ -175,12 +175,12 @@ unsafe extern "C" fn write_fragment<F>(opaque: *mut c_void, fragment: *const c_c
 where
 	F: FnMut(&[u8]),
 {
-	// SAFETY: `print_raw` passes a live, uniquely borrowed `F` for the duration of
-	// the synchronous call.
+	// SAFETY: `print_raw` passes a live, uniquely borrowed `F` for the duration
+	// of the synchronous call.
 	let write = unsafe { &mut *opaque.cast::<F>() };
 
-	// SAFETY: jemalloc supplies a non-null, NUL-terminated fragment that remains
-	// live for this callback invocation.
+	// SAFETY: jemalloc supplies a non-null, NUL-terminated fragment that
+	// remains live for this callback invocation.
 	let fragment = unsafe { CStr::from_ptr(fragment) };
 
 	write(fragment.to_bytes());
