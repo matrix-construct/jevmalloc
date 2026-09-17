@@ -43,8 +43,9 @@ Default: `cache_oblivious`, `initial_exec_tls`,
   symbols like `malloc` without a prefix, overriding the ones defined by libc.
   This usually causes C and C++ code linked into the same program to use
   `jemalloc` as well. On the targets in `NO_UNPREFIXED_MALLOC_TARGETS` the
-  prefix is applied regardless, because unprefixing is known to segfault there
-  from allocator mismatches.
+  prefix is applied regardless, because unprefixing is known to fail there,
+  through allocator mismatches or, on OpenBSD, an abort while `jemalloc`
+  initializes.
 
 * `cache_oblivious` (default, `--enable-cache-oblivious`): when disabled, all
   large allocations are page-aligned as an implementation artifact, which can
