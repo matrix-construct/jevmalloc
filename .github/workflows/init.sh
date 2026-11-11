@@ -36,15 +36,20 @@ mark_seen() {
 
 mark_seen "$builder"
 
-# Runner-keyed knobs (JSON maps of runner -> value, selected by $runner).
-reserved_space=$(echo -n "$reserved_space" | jq -r ".$runner")
-max_used_space=$(echo -n "$max_used_space" | jq -r ".$runner")
-cachemount_max=$(echo -n "$cachemount_max" | jq -r ".$runner")
-min_free_space=$(echo -n "$min_free_space" | jq -r ".$runner")
-safety_free_space=$(echo -n "$safety_free_space" | jq -r ".$runner")
-reap_idle_hours=$(echo -n "$reap_idle_hours" | jq -r ".$runner")
-reap_min_free=$(echo -n "$reap_min_free" | jq -r ".$runner")
-seed_budget=$(echo -n "$seed_budget" | jq -r ".$runner")
+# Runner-keyed knobs (JSON maps of runner -> value, selected by $runner). The
+# key goes in as an argument; a bare `.gcp-arm` path would parse as subtraction.
+knob() {
+	echo -n "$1" | jq -r --arg runner "$runner" '.[$runner]'
+}
+
+reserved_space=$(knob "$reserved_space")
+max_used_space=$(knob "$max_used_space")
+cachemount_max=$(knob "$cachemount_max")
+min_free_space=$(knob "$min_free_space")
+safety_free_space=$(knob "$safety_free_space")
+reap_idle_hours=$(knob "$reap_idle_hours")
+reap_min_free=$(knob "$reap_min_free")
+seed_budget=$(knob "$seed_budget")
 
 reap_builder() {
 	docker buildx rm "$1" >/dev/null 2>&1

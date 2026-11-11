@@ -88,7 +88,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        runner: ${{fromJSON(vars.RUNNERS || '["het", "aws"]')}}
+        runner: ${{fromJSON(vars.RUNNERS || '["het", "gcp-arm"]')}}
 
     steps:
       - uses: actions/checkout@v4
@@ -104,14 +104,14 @@ jobs:
           runner: ${{matrix.runner}}
           pipeline: ${{github.event.head_commit.message}}
           seed_builder: ${{vars.SEED_BUILDER || 'jevolk'}}
-          reserved_space:    '{"het": "40GB",  "aws": "12GB"}'
-          max_used_space:    '{"het": "120GB", "aws": "32GB"}'
-          cachemount_max:    '{"het": "80GB",  "aws": "12GB"}'
-          min_free_space:    '{"het": "32GB",  "aws": "16GB"}'
-          safety_free_space: '{"het": "16GB",  "aws": "8GB"}'
-          reap_idle_hours:   '{"het": "24",    "aws": "24"}'
-          reap_min_free:     '{"het": "500GB", "aws": "40GB"}'
-          seed_budget:       '{"het": "250GB", "aws": "0GB"}'
+          reserved_space:    '{"het": "40GB",  "aws": "12GB", "gcp-arm": "20GB"}'
+          max_used_space:    '{"het": "120GB", "aws": "32GB", "gcp-arm": "100GB"}'
+          cachemount_max:    '{"het": "80GB",  "aws": "12GB", "gcp-arm": "30GB"}'
+          min_free_space:    '{"het": "32GB",  "aws": "16GB", "gcp-arm": "40GB"}'
+          safety_free_space: '{"het": "16GB",  "aws": "8GB",  "gcp-arm": "16GB"}'
+          reap_idle_hours:   '{"het": "24",    "aws": "24",   "gcp-arm": "24"}'
+          reap_min_free:     '{"het": "500GB", "aws": "40GB", "gcp-arm": "60GB"}'
+          seed_budget:       '{"het": "250GB", "aws": "0GB",  "gcp-arm": "140GB"}'
         run: |
           .github/workflows/init.sh
 

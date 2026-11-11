@@ -37,7 +37,7 @@ jobs:
     runs-on: >-
       ${{ github.event_name == 'pull_request'
           && (inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest')
-          || (inputs.arch == 'arm64' && 'aws' || 'het') }}
+          || (inputs.arch == 'arm64' && 'gcp-arm' || 'het') }}
 
     timeout-minutes: ${{inputs.timeout}}
 
